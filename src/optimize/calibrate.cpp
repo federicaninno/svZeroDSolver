@@ -16,16 +16,17 @@ nlohmann::json calibrate(const nlohmann::json &config) {
   double increment_tol =
       calibration_parameters.value("tolerance_increment", 1e-10);
   int max_iter = calibration_parameters.value("maximum_iterations", 100);
+  // Default value for stenosis calibration should be false to allow easier calibration on other blocks
+  // Probably calibrate_stenosis should not be a global variable but block-specific
   bool calibrate_stenosis =
-      calibration_parameters.value("calibrate_stenosis_coefficient", true);
+      calibration_parameters.value("calibrate_stenosis_coefficient", false);
   bool zero_capacitance =
       calibration_parameters.value("set_capacitance_to_zero", false);
   double lambda0 = calibration_parameters.value("initial_damping_factor", 1.0);
 
-  int num_params = 3;
-  if (calibrate_stenosis) {
-    num_params = 4;
-  }
+   // Number of parameters to optimize
+   // This should not be a global variable, ideally a string vector with the names of the parameters to optimize for each block
+  int num_params = calibration_parameters.value("num_params_to_opt", 0);
 
   // Setup model
   auto model = Model();
@@ -153,19 +154,36 @@ nlohmann::json calibrate(const nlohmann::json &config) {
   for (auto &vessel_config : output_config["vessels"]) {
     std::string vessel_name = vessel_config["vessel_name"];
     DEBUG_MSG("Reading initial alpha for " << vessel_name);
-    auto block = model.get_block(vessel_name);
-    alpha[block->global_param_ids[0]] =
-        vessel_config["zero_d_element_values"].value("R_poiseuille", 0.0);
-    alpha[block->global_param_ids[1]] =
-        vessel_config["zero_d_element_values"].value("C", 0.0);
-    alpha[block->global_param_ids[2]] =
-        vessel_config["zero_d_element_values"].value("L", 0.0);
-    if (num_params > 3) {
-      alpha[block->global_param_ids[3]] =
-          vessel_config["zero_d_element_values"].value("stenosis_coefficient",
-                                                       0.0);
+    
+    // Read the block type from the JSON "zero_d_element_type" field
+    std::string block_type = vessel_config["zero_d_element_type"].get<std::string>();
+
+    if (block_type == "BloodVessel") {
+      auto block = model.get_block(vessel_name);
+      alpha[block->global_param_ids[0]] =
+          vessel_config["zero_d_element_values"].value("R_poiseuille", 0.0);
+      alpha[block->global_param_ids[1]] =
+          vessel_config["zero_d_element_values"].value("C", 0.0);
+      alpha[block->global_param_ids[2]] =
+          vessel_config["zero_d_element_values"].value("L", 0.0);
+      if (num_params > 3) {
+        alpha[block->global_param_ids[3]] =
+            vessel_config["zero_d_element_values"].value("stenosis_coefficient",
+                                                         0.0);
+      }
+    }
+
+    if (block_type == "ChamberSphere") {
+      auto block = model.get_block(vessel_name);
+
+      alpha[block->global_param_ids[0]] =
+          vessel_config["zero_d_element_values"].value("thick0", 0.0);
+
+      alpha[block->global_param_ids[1]] =
+      vessel_config["zero_d_element_values"].value("radius0", 0.0);
     }
   }
+
   for (auto &junction_config : output_config["junctions"]) {
     std::string junction_name = junction_config["junction_name"];
     DEBUG_MSG("Reading initial alpha for " << junction_name);
@@ -213,21 +231,40 @@ nlohmann::json calibrate(const nlohmann::json &config) {
   // Write optimized simulation config file
   for (auto &vessel_config : output_config["vessels"]) {
     std::string vessel_name = vessel_config["vessel_name"];
-    auto block = model.get_block(vessel_name);
-    double stenosis_coeff = 0.0;
-    if (num_params > 3) {
-      stenosis_coeff = alpha[block->global_param_ids[3]];
+    
+    // Read the block type from the JSON "zero_d_element_type" field
+    std::string block_type =
+        vessel_config["zero_d_element_type"].get<std::string>();
+
+    if (block_type == "BloodVessel") {
+      auto block = model.get_block(vessel_name);
+      double stenosis_coeff = 0.0;
+      if (num_params > 3) {
+        stenosis_coeff = alpha[block->global_param_ids[3]];
+      }
+
+      double c_value = 0.0;
+      if (!zero_capacitance) {
+        c_value = alpha[block->global_param_ids[1]];
+      }
+
+      vessel_config["zero_d_element_values"] = {
+          {"R_poiseuille", alpha[block->global_param_ids[0]]},
+          {"C", std::max(c_value, 0.0)},
+          {"L", std::max(alpha[block->global_param_ids[2]], 0.0)},
+          {"stenosis_coefficient", stenosis_coeff}};
     }
-    double c_value = 0.0;
-    if (!zero_capacitance) {
-      c_value = alpha[block->global_param_ids[1]];
+
+    if (block_type == "ChamberSphere") {
+      auto block = model.get_block(vessel_name);
+
+      vessel_config["zero_d_element_values"] = {
+          {"thick0", alpha[block->global_param_ids[0]]},
+          {"radius0", alpha[block->global_param_ids[1]]}
+        };
     }
-    vessel_config["zero_d_element_values"] = {
-        {"R_poiseuille", alpha[block->global_param_ids[0]]},
-        {"C", std::max(c_value, 0.0)},
-        {"L", std::max(alpha[block->global_param_ids[2]], 0.0)},
-        {"stenosis_coefficient", stenosis_coeff}};
   }
+
   for (auto &junction_config : output_config["junctions"]) {
     std::string junction_name = junction_config["junction_name"];
     auto block = model.get_block(junction_name);

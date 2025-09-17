@@ -131,3 +131,76 @@ void ChamberSphere::get_elastance_values(std::vector<double> &parameters) {
   act = std::abs(act_t);
   act_plus = std::max(act_t, 0.0);
 }
+
+void ChamberSphere::update_gradient(
+    Eigen::SparseMatrix<double>& jacobian,
+    Eigen::Matrix<double, Eigen::Dynamic, 1>& residual,
+    Eigen::Matrix<double, Eigen::Dynamic, 1>& alpha, std::vector<double>& y,
+    std::vector<double>& dy) {
+  auto Pin = y[global_var_ids[0]];  
+  auto Qin = y[global_var_ids[1]];  
+  auto Pout = y[global_var_ids[2]];  
+  auto Qout = y[global_var_ids[3]];  
+  auto radius = y[global_var_ids[4]];  
+  auto velo = y[global_var_ids[5]];  
+  auto stress = y[global_var_ids[6]];  
+  auto tau = y[global_var_ids[7]];  
+  auto volume = y[global_var_ids[8]]; 
+
+  auto dPin = dy[global_var_ids[0]];  
+  auto dQin = dy[global_var_ids[1]];  
+  auto dPout = dy[global_var_ids[2]];  
+  auto dQout = dy[global_var_ids[3]];  
+  auto dradius = dy[global_var_ids[4]];  
+  auto dvelo = dy[global_var_ids[5]];  
+  auto dstress = dy[global_var_ids[6]];  
+  auto dtau = dy[global_var_ids[7]];  
+  auto dvolume = dy[global_var_ids[8]];  
+
+  auto thick0 = alpha[global_param_ids[0]];
+  //auto radius0 = 0.05;
+  auto radius0 = alpha[global_param_ids[1]];
+  // These should not be hardcoded
+  double rho = 1000.0;
+  double W1 = 1472.0;      
+  double W2 = 40.0;        
+  double sigma_max = 0.0;  
+  double eta = 25.0;
+
+  // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =
+      dvelo * rho + stress/radius0 + radius * stress/pow(radius0, 2);
+
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) =
+      (2*Pout*radius*(radius + radius0) - radius*stress*thick0 - stress*thick0*(radius + radius0))/pow(radius0, 3);
+
+  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) =
+       4*(-radius0*(radius + radius0)*(12*dradius*eta*(2*pow(radius0, 11) - pow(radius + radius0, 11)) + 
+       6*pow(radius + radius0, 5)*(pow(radius0, 5) - pow(radius + radius0, 5))*(W1*pow(radius0, 2) + 
+       W2*pow(radius + radius0, 2)) + 2*pow(radius + radius0, 5)*(pow(radius0, 6) - 
+       pow(radius + radius0, 6))*(W1*radius0 + W2*(radius + radius0)) + 5*pow(radius + radius0, 4)*(pow(radius0, 6) - 
+       pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))) + 
+       11*radius0*(dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) + 
+       pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + 
+       W2*pow(radius + radius0, 2))) + 2*(radius + radius0)*(dradius*eta*(2*pow(radius0, 12) - 
+       pow(radius + radius0, 12)) + pow(radius + radius0, 5)*(pow(radius0, 6) - 
+       pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))))/(pow(radius0, 3)*pow(radius + radius0, 12));
+
+  jacobian.coeffRef(global_eqn_ids[2], global_param_ids[1]) =
+       8*M_PI*velo*(radius + radius0);
+
+  // RESIDUALS
+  residual(global_eqn_ids[0]) =
+      rho * thick0 * dvelo + (thick0/radius0) * (1 + (radius/radius0)) * stress -
+      Pout * (1 + (radius/radius0)) * (1 + (radius/radius0));
+
+  //Obtained from F, E and C above
+  residual(global_eqn_ids[1]) =  - stress + tau + 
+       4 * (dradius * eta * (-2 * pow(radius0, 12) + pow(radius + radius0, 12)) +
+       pow(radius + radius0, 5) * (-pow(radius0, 6) + 
+       pow(radius + radius0, 6)) * (W1 * pow(radius0, 2) + 
+       W2 * pow(radius + radius0, 2))) / (pow(radius0, 2) * pow(radius + radius0, 11));
+
+  residual(global_eqn_ids[2]) = - dvolume + 4 * M_PI * velo * pow(radius + radius0, 2);
+      
+}
