@@ -44,9 +44,18 @@ helper_functions: |
 
 residuals:
   - rho * thick0 * dvelo_dt + (thick0 / radius0) * (1 + (radius / radius0)) * stress - Pout * CG(radius)
+
   - -stress + tau + 4 * (1 - CG(radius) ** -3) * (W1 + CG(radius) * W2) + 2 * eta * dCG(radius, dradius_dt) * (1 - 2 * CG(radius) ** -6)
-  - 4 * pi * radius0 ** 2 * CG(radius) * velo - dvolume_dt
+
+  - 4 * pi * radius0 ** 2 * CG(radius) * velo - dvolume_dt # 4 * pi * radius0 ** 2* CG(radius) * dradius_dt - Qin + Qout
+
+
   - dtau_dt + act * tau - sigma_max * act_plus
-  - dradius_dt - velo
-  - Qin - Qout - dvolume_dt
-  - Pin - Pout
+
+  - dradius_dt - velo # velo = dradius_dt
+
+  # These are the variables that are provided as inputs 
+
+  - Qin - Qout - dvolume_dt # dvolume_dt = Qin - Qout, if Qout = 0, dvolume_dt = Qin
+
+  - Pin - Pout # Pout = Pin
