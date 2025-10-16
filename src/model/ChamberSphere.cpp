@@ -6,8 +6,8 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler &dofhandler) {
-  Block::setup_dofs_(dofhandler, 7,
-                     {"radius", "velo", "stress", "tau", "volume"});
+  Block::setup_dofs_(dofhandler, 6,
+                     {"radius", "stress", "tau", "volume"});
 }
 
 void ChamberSphere::update_constant(SparseSystem &system,
@@ -141,21 +141,19 @@ void ChamberSphere::update_gradient(
   auto Qin = y[global_var_ids[1]];  
   auto Pout = y[global_var_ids[2]];  
   auto Qout = y[global_var_ids[3]];  
-  auto radius = y[global_var_ids[4]];  
-  auto velo = y[global_var_ids[5]];  
-  auto stress = y[global_var_ids[6]];  
-  auto tau = y[global_var_ids[7]];  
-  auto volume = y[global_var_ids[8]]; 
+  auto radius = y[global_var_ids[4]];   
+  auto stress = y[global_var_ids[5]];  
+  auto tau = y[global_var_ids[6]];  
+  auto volume = y[global_var_ids[7]]; 
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
   auto dPout = dy[global_var_ids[2]];  
   auto dQout = dy[global_var_ids[3]];  
-  auto dradius = dy[global_var_ids[4]];  
-  auto dvelo = dy[global_var_ids[5]];  
-  auto dstress = dy[global_var_ids[6]];  
-  auto dtau = dy[global_var_ids[7]];  
-  auto dvolume = dy[global_var_ids[8]];  
+  auto dradius = dy[global_var_ids[4]];   
+  auto dstress = dy[global_var_ids[5]];  
+  auto dtau = dy[global_var_ids[6]];  
+  auto dvolume = dy[global_var_ids[7]];  
 
   auto thick0 = alpha[global_param_ids[0]];
   //auto radius0 = 0.05;
@@ -169,10 +167,20 @@ void ChamberSphere::update_gradient(
 
   // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =
-      dvelo * rho + stress/radius0 + radius * stress/pow(radius0, 2);
+      (1.0*pow(M_PI, 2)*stress*pow(radius + radius0, 6) 
+      + 0.0625*pow(radius0, 2)*rho*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+      - 2.0*pow(Qin - Qout, 2)))/(pow(M_PI, 2)*pow(radius0, 2)*pow(radius + radius0, 5));
 
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) =
-      (2*Pout*radius*(radius + radius0) - radius*stress*thick0 - stress*thick0*(radius + radius0))/pow(radius0, 3);
+      (radius0*(radius + radius0)*(-1.0*pow(M_PI, 2)*Pout*pow(radius + radius0, 6) 
+      + 6.0*pow(M_PI, 2)*pow(radius + radius0, 5)*(-Pout*(radius + radius0) + stress*thick0) 
+      + 0.75*M_PI*pow(radius0, 2)*rho*thick0*(dQin - dQout)*pow(radius + radius0, 2) 
+      + 0.125*radius0*rho*thick0*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+      - 2.0*pow(Qin - Qout, 2))) + radius0*(5.0*pow(M_PI, 2)*pow(radius + radius0, 6)*(Pout*(radius + radius0) 
+      - stress*thick0) - 0.3125*pow(radius0, 2)*rho*thick0*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+      - 2.0*pow(Qin - Qout, 2))) + (radius + radius0)*(2.0*pow(M_PI, 2)*pow(radius + radius0, 6)*(Pout*(radius + radius0) - stress*thick0) 
+      - 0.125*pow(radius0, 2)*rho*thick0*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+      - 2.0*pow(Qin - Qout, 2))))/(pow(M_PI, 2)*pow(radius0, 3)*pow(radius + radius0, 6));
 
   jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) =
        4*(-radius0*(radius + radius0)*(12*dradius*eta*(2*pow(radius0, 11) - pow(radius + radius0, 11)) + 
@@ -187,12 +195,14 @@ void ChamberSphere::update_gradient(
        pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))))/(pow(radius0, 3)*pow(radius + radius0, 12));
 
   jacobian.coeffRef(global_eqn_ids[2], global_param_ids[1]) =
-       8*M_PI*velo*(radius + radius0);
+       8*M_PI*dradius*(radius + radius0);
 
   // RESIDUALS
-  residual(global_eqn_ids[0]) =
-      rho * thick0 * dvelo + (thick0/radius0) * (1 + (radius/radius0)) * stress -
-      Pout * (1 + (radius/radius0)) * (1 + (radius/radius0));
+  residual(global_eqn_ids[0]) = (1.0/16.0)*(-pow(radius0, 2)*rho*thick0*(2.0*pow(Qin - Qout, 2) 
+       + 4*M_PI*(-dQin + dQout)*pow(radius + radius0, 3)) 
+       + 16*pow(M_PI, 2)*pow(radius + radius0, 6)*(-Pout*(radius + radius0) 
+       + stress*thick0))/(pow(M_PI, 2)*pow(radius0, 2)*pow(radius + radius0, 5));
+
 
   //Obtained from F, E and C above
   residual(global_eqn_ids[1]) =  - stress + tau + 
@@ -201,6 +211,6 @@ void ChamberSphere::update_gradient(
        pow(radius + radius0, 6)) * (W1 * pow(radius0, 2) + 
        W2 * pow(radius + radius0, 2))) / (pow(radius0, 2) * pow(radius + radius0, 11));
 
-  residual(global_eqn_ids[2]) = - dvolume + 4 * M_PI * velo * pow(radius + radius0, 2);
+  residual(global_eqn_ids[2]) = - dvolume + 4 * M_PI * dradius * pow(radius + radius0, 2);
       
 }
