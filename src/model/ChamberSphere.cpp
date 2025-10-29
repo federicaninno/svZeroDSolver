@@ -6,8 +6,8 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
-  Block::setup_dofs_(dofhandler, 7,
-                     {"radius", "velo", "stress", "tau", "volume"});
+  Block::setup_dofs_(dofhandler, 6,
+                     {"radius", "stress", "volume", "time"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
@@ -141,21 +141,17 @@ void ChamberSphere::update_gradient(
   auto Qin = y[global_var_ids[1]];  
   auto Pout = y[global_var_ids[2]];  
   auto Qout = y[global_var_ids[3]];  
-  auto radius = y[global_var_ids[4]];  
-  auto velo = y[global_var_ids[5]];  
-  auto stress = y[global_var_ids[6]];  
-  auto tau = y[global_var_ids[7]];  
-  auto volume = y[global_var_ids[8]]; 
+  auto radius = y[global_var_ids[4]];    
+  auto stress = y[global_var_ids[5]];    
+  auto volume = y[global_var_ids[6]]; 
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
   auto dPout = dy[global_var_ids[2]];  
   auto dQout = dy[global_var_ids[3]];  
-  auto dradius = dy[global_var_ids[4]];  
-  auto dvelo = dy[global_var_ids[5]];  
-  auto dstress = dy[global_var_ids[6]];  
-  auto dtau = dy[global_var_ids[7]];  
-  auto dvolume = dy[global_var_ids[8]];  
+  auto dradius = dy[global_var_ids[4]];    
+  auto dstress = dy[global_var_ids[5]];    
+  auto dvolume = dy[global_var_ids[6]];  
 
   auto thick0 = alpha[global_param_ids[0]];
   auto radius0 = alpha[global_param_ids[1]];
@@ -165,10 +161,42 @@ void ChamberSphere::update_gradient(
   double W2 = 40.0;        
   double sigma_max = 0.0;  
   double eta = 25.0;
+  double alpha_max = 0.0;
+  double alpha_min = 0.0;
+  double tsys = 0.0;
+  double tdias = 0.0;
+  double steepness = 1e-9; // Avoid division by zero in S_plus and S_minus
 
-  // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
+  // Compute act and act_plus
+  const auto T_cardiac = 1.6119; // This should not be hardcoded
+  auto time = y[global_var_ids[7]];
+
+  double t_in_cycle = fmod(time, T_cardiac);
+
+  // Same logic as in get_elastance_values
+  const double S_plus = 0.5 * (1.0 + tanh((t_in_cycle - tsys) / steepness));
+  const double S_minus = 0.5 * (1.0 - tanh((t_in_cycle - tdias) / steepness));
+
+  const double f = S_plus * S_minus;
+
+  const double act_t = alpha_max * f + alpha_min * (1 - f);
+
+  act = std::abs(act_t);
+  act_plus = std::max(act_t, 0.0);
+
+  // Compute tau - mimicking single backward Euler step
+  // Probably I can add here integrator code later on
+  static double tau_prev = 0.0;
+  auto dt = dy[global_var_ids[7]];
+
+  auto tau_new = (tau_prev + dt * sigma_max * act_plus) / (1.0 + dt * act);
+  tau_prev = tau_new;
+  auto tau = tau_new;
+
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =
-      dvelo * rho + stress/radius0 + radius * stress/pow(radius0, 2);
+      (1.0*pow(M_PI, 2)*stress*pow(radius + radius0, 6) 
+      + 0.0625*pow(radius0, 2)*rho*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+      - 2.0*pow(Qin - Qout, 2)))/(pow(M_PI, 2)*pow(radius0, 2)*pow(radius + radius0, 5));
 
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) =
       (2*Pout*radius*(radius + radius0) - radius*stress*thick0 - stress*thick0*(radius + radius0))/pow(radius0, 3);
@@ -186,20 +214,19 @@ void ChamberSphere::update_gradient(
        pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))))/(pow(radius0, 3)*pow(radius + radius0, 12));
 
   jacobian.coeffRef(global_eqn_ids[2], global_param_ids[1]) =
-       8*M_PI*velo*(radius + radius0);
+       8*M_PI*dradius*(radius + radius0);
 
-  // RESIDUALS
-  residual(global_eqn_ids[0]) =
-      rho * thick0 * dvelo + (thick0/radius0) * (1 + (radius/radius0)) * stress -
-      Pout * (1 + (radius/radius0)) * (1 + (radius/radius0));
+  residual(global_eqn_ids[0]) = (1.0/16.0)*(-pow(radius0, 2)*rho*thick0*(2.0*pow(Qin - Qout, 2) 
+       + 4*M_PI*(-dQin + dQout)*pow(radius + radius0, 3)) 
+       + 16*pow(M_PI, 2)*pow(radius + radius0, 6)*(-Pout*(radius + radius0) 
+       + stress*thick0))/(pow(M_PI, 2)*pow(radius0, 2)*pow(radius + radius0, 5));
 
-  //Obtained from F, E and C above
   residual(global_eqn_ids[1]) =  - stress + tau + 
        4 * (dradius * eta * (-2 * pow(radius0, 12) + pow(radius + radius0, 12)) +
        pow(radius + radius0, 5) * (-pow(radius0, 6) + 
        pow(radius + radius0, 6)) * (W1 * pow(radius0, 2) + 
        W2 * pow(radius + radius0, 2))) / (pow(radius0, 2) * pow(radius + radius0, 11));
 
-  residual(global_eqn_ids[2]) = - dvolume + 4 * M_PI * velo * pow(radius + radius0, 2);
+  residual(global_eqn_ids[2]) = - dvolume + 4 * M_PI * dradius * pow(radius + radius0, 2);
       
 }
