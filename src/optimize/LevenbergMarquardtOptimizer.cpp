@@ -105,6 +105,19 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> LevenbergMarquardtOptimizer::run(
     std::cout << std::setprecision(1) << std::scientific << "Iteration " << i + 1 << " | lambda: " << lambda
               << " | norm inc: " << norm_inc << " | norm grad: " << norm_grad
               << std::endl;
+    
+    std::cout << "Residuals:" << std::endl;
+    // Print residuals and set the number of observation you want to print
+    int max_obs_to_print = std::min(num_obs, 5);
+    for (int i = 0; i < max_obs_to_print; ++i) {
+      std::cout << "  Observation " << i << ": [";
+      for (int eq = 0; eq < num_eqns; ++eq) {
+        int idx = i * num_eqns + eq;
+        std::cout << std::scientific << std::setprecision(2) << residual[idx];
+        if (eq < num_eqns - 1) std::cout << ", ";
+      }
+    std::cout << "]" << std::endl;
+    }
 
     // Stopping conditions
     if ((norm_grad < tol_grad) && (norm_inc < tol_inc)) {
