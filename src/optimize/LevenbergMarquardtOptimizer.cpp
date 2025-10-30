@@ -106,6 +106,52 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> LevenbergMarquardtOptimizer::run(
               << " | norm inc: " << norm_inc << " | norm grad: " << norm_grad
               << std::endl;
 
+    // Jacobian finite-difference check 
+    const double eps_base = 1e-6;
+    Eigen::MatrixXd J_fd(num_dpoints, num_params);
+    Eigen::VectorXd r0 = residual; // analytical residual at current alpha
+
+    for (int j = 0; j < num_params; ++j) {
+       double h = eps_base * std::max(1.0, std::abs(alpha[j]));
+       Eigen::VectorXd alpha_pert = alpha;
+       alpha_pert[j] += h;
+
+        // recompute residual for perturbed alpha
+        update_gradient(alpha_pert, y_obs, dy_obs);
+        Eigen::VectorXd r1 = residual;
+
+        // compute FD column and restore analytical residuals
+        J_fd.col(j) = (r1 - r0) / h;
+        update_gradient(alpha, y_obs, dy_obs);
+    }
+
+    Eigen::MatrixXd J_analytic = Eigen::MatrixXd(jacobian);
+    Eigen::MatrixXd diff = J_analytic - J_fd;
+    // Max element-wise difference
+    double max_err = diff.cwiseAbs().maxCoeff();
+    // Relative error with respect to finite differences method (norm)
+    double rel_err = diff.norm() / J_fd.norm();
+
+    std::cout << "Jacobian FD check at iter " << i << ":\n"
+            << "  max abs error = " << max_err
+            << ", relative error = " << rel_err << std::endl;
+      
+    // Restore analytical Jacobian and residual (since update_gradient was called repeatedly)
+    update_gradient(alpha, y_obs, dy_obs);
+
+    std::cout << "Residuals:" << std::endl;
+    // Print residuals and set the number of observation you want to print
+    int max_obs_to_print = std::min(num_obs, 5);
+    for (int i = 0; i < max_obs_to_print; ++i) {
+      std::cout << "  Observation " << i << ": [";
+      for (int eq = 0; eq < num_eqns; ++eq) {
+        int idx = i * num_eqns + eq;
+        std::cout << std::scientific << std::setprecision(2) << residual[idx];
+        if (eq < num_eqns - 1) std::cout << ", ";
+      }
+    std::cout << "]" << std::endl;
+    }
+
     // Stopping conditions
     if ((norm_grad < tol_grad) && (norm_inc < tol_inc)) {
       std::cout << "Converged: gradient or increment below tolerance.\n";

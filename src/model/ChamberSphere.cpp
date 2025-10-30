@@ -6,8 +6,8 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
-  Block::setup_dofs_(dofhandler, 6,
-                     {"radius", "stress", "volume", "time"});
+  Block::setup_dofs_(dofhandler, 5,
+                     {"radius", "tau", "volume"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
@@ -141,16 +141,16 @@ void ChamberSphere::update_gradient(
   auto Qin = y[global_var_ids[1]];  
   auto Pout = y[global_var_ids[2]];  
   auto Qout = y[global_var_ids[3]];  
-  auto radius = y[global_var_ids[4]];    
-  auto stress = y[global_var_ids[5]];    
+  auto radius = y[global_var_ids[4]];
+  auto tau = y[global_var_ids[5]];        
   auto volume = y[global_var_ids[6]]; 
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
   auto dPout = dy[global_var_ids[2]];  
   auto dQout = dy[global_var_ids[3]];  
-  auto dradius = dy[global_var_ids[4]];    
-  auto dstress = dy[global_var_ids[5]];    
+  auto dradius = dy[global_var_ids[4]];
+  auto dtau = dy[global_var_ids[5]];       
   auto dvolume = dy[global_var_ids[6]];  
 
   auto thick0 = alpha[global_param_ids[0]];
@@ -167,66 +167,46 @@ void ChamberSphere::update_gradient(
   double tdias = 0.0;
   double steepness = 1e-9; // Avoid division by zero in S_plus and S_minus
 
-  // Compute act and act_plus
-  const auto T_cardiac = 1.6119; // This should not be hardcoded
-  auto time = y[global_var_ids[7]];
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) = (pow(M_PI, 2)*(-4*dradius*eta*(2*pow(radius0, 12) 
+     - pow(radius + radius0, 12)) + pow(radius0, 2)*tau*pow(radius + radius0, 11) 
+     - 4*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
+     + W2*pow(radius + radius0, 2))) 
+     + 0.0625*pow(radius0, 4)*rho*pow(radius + radius0, 5)*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+     - 2.0*pow(Qin - Qout, 2)))/(pow(M_PI, 2)*pow(radius0, 4)*pow(radius + radius0, 10));
 
-  double t_in_cycle = fmod(time, T_cardiac);
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) = (radius0*(radius + radius0)*(-12*pow(M_PI, 2)*Pout*pow(radius0, 2)*pow(radius + radius0, 11) 
+     - 2*pow(M_PI, 2)*Pout*radius0*pow(radius + radius0, 12) - pow(M_PI, 2)*thick0*(48*dradius*eta*(2*pow(radius0, 11) 
+     - pow(radius + radius0, 11)) - 11*pow(radius0, 2)*tau*pow(radius + radius0, 10) 
+     - 2*radius0*tau*pow(radius + radius0, 11) + 24*pow(radius + radius0, 5)*(pow(radius0, 5) 
+     - pow(radius + radius0, 5))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2)) 
+     + 8*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*radius0 + W2*(radius + radius0)) 
+     + 20*pow(radius + radius0, 4)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
+     + W2*pow(radius + radius0, 2))) + 0.75*M_PI*pow(radius0, 4)*rho*thick0*(dQin - dQout)*pow(radius + radius0, 7) 
+     + 0.3125*pow(radius0, 4)*rho*thick0*pow(radius + radius0, 4)*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+     - 2.0*pow(Qin - Qout, 2)) + 0.25*pow(radius0, 3)*rho*thick0*pow(radius + radius0, 5)*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+     - 2.0*pow(Qin - Qout, 2))) + radius0*(10*pow(M_PI, 2)*Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
+     + 10*pow(M_PI, 2)*thick0*(4*dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) 
+     - pow(radius0, 2)*tau*pow(radius + radius0, 11) + 4*pow(radius + radius0, 5)*(pow(radius0, 6) 
+     - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))) 
+     - 0.625*pow(radius0, 4)*rho*thick0*pow(radius + radius0, 5)*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+     - 2.0*pow(Qin - Qout, 2))) + (radius + radius0)*(4*pow(M_PI, 2)*Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
+     + 4*pow(M_PI, 2)*thick0*(4*dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) 
+     - pow(radius0, 2)*tau*pow(radius + radius0, 11) + 4*pow(radius + radius0, 5)*(pow(radius0, 6) 
+     - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))) 
+     - 0.25*pow(radius0, 4)*rho*thick0*pow(radius + radius0, 5)*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
+     - 2.0*pow(Qin - Qout, 2))))/(pow(M_PI, 2)*pow(radius0, 5)*pow(radius + radius0, 11));
 
-  // Same logic as in get_elastance_values
-  const double S_plus = 0.5 * (1.0 + tanh((t_in_cycle - tsys) / steepness));
-  const double S_minus = 0.5 * (1.0 - tanh((t_in_cycle - tdias) / steepness));
-
-  const double f = S_plus * S_minus;
-
-  const double act_t = alpha_max * f + alpha_min * (1 - f);
-
-  act = std::abs(act_t);
-  act_plus = std::max(act_t, 0.0);
-
-  // Compute tau - mimicking single backward Euler step
-  // Probably I can add here integrator code later on
-  static double tau_prev = 0.0;
-  auto dt = dy[global_var_ids[7]];
-
-  auto tau_new = (tau_prev + dt * sigma_max * act_plus) / (1.0 + dt * act);
-  tau_prev = tau_new;
-  auto tau = tau_new;
-
-  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =
-      (1.0*pow(M_PI, 2)*stress*pow(radius + radius0, 6) 
-      + 0.0625*pow(radius0, 2)*rho*(4*M_PI*(dQin - dQout)*pow(radius + radius0, 3) 
-      - 2.0*pow(Qin - Qout, 2)))/(pow(M_PI, 2)*pow(radius0, 2)*pow(radius + radius0, 5));
-
-  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) =
-      (2*Pout*radius*(radius + radius0) - radius*stress*thick0 - stress*thick0*(radius + radius0))/pow(radius0, 3);
-
-  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) =
-       4*(-radius0*(radius + radius0)*(12*dradius*eta*(2*pow(radius0, 11) - pow(radius + radius0, 11)) + 
-       6*pow(radius + radius0, 5)*(pow(radius0, 5) - pow(radius + radius0, 5))*(W1*pow(radius0, 2) + 
-       W2*pow(radius + radius0, 2)) + 2*pow(radius + radius0, 5)*(pow(radius0, 6) - 
-       pow(radius + radius0, 6))*(W1*radius0 + W2*(radius + radius0)) + 5*pow(radius + radius0, 4)*(pow(radius0, 6) - 
-       pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))) + 
-       11*radius0*(dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) + 
-       pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + 
-       W2*pow(radius + radius0, 2))) + 2*(radius + radius0)*(dradius*eta*(2*pow(radius0, 12) - 
-       pow(radius + radius0, 12)) + pow(radius + radius0, 5)*(pow(radius0, 6) - 
-       pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))))/(pow(radius0, 3)*pow(radius + radius0, 12));
-
-  jacobian.coeffRef(global_eqn_ids[2], global_param_ids[1]) =
+  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) = 
        8*M_PI*dradius*(radius + radius0);
 
-  residual(global_eqn_ids[0]) = (1.0/16.0)*(-pow(radius0, 2)*rho*thick0*(2.0*pow(Qin - Qout, 2) 
+  residual(global_eqn_ids[0]) = (-pow(M_PI, 2)*Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
+       - 1.0/16.0*pow(radius0, 4)*rho*thick0*pow(radius + radius0, 5)*(2.0*pow(Qin - Qout, 2) 
        + 4*M_PI*(-dQin + dQout)*pow(radius + radius0, 3)) 
-       + 16*pow(M_PI, 2)*pow(radius + radius0, 6)*(-Pout*(radius + radius0) 
-       + stress*thick0))/(pow(M_PI, 2)*pow(radius0, 2)*pow(radius + radius0, 5));
+       + pow(M_PI, 2)*thick0*(4*dradius*eta*(-2*pow(radius0, 12) + pow(radius + radius0, 12)) 
+       + pow(radius0, 2)*tau*pow(radius + radius0, 11) + 4*pow(radius + radius0, 5)*(-pow(radius0, 6) 
+       + pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
+       + W2*pow(radius + radius0, 2))))/(pow(M_PI, 2)*pow(radius0, 4)*pow(radius + radius0, 10));
 
-  residual(global_eqn_ids[1]) =  - stress + tau + 
-       4 * (dradius * eta * (-2 * pow(radius0, 12) + pow(radius + radius0, 12)) +
-       pow(radius + radius0, 5) * (-pow(radius0, 6) + 
-       pow(radius + radius0, 6)) * (W1 * pow(radius0, 2) + 
-       W2 * pow(radius + radius0, 2))) / (pow(radius0, 2) * pow(radius + radius0, 11));
-
-  residual(global_eqn_ids[2]) = - dvolume + 4 * M_PI * dradius * pow(radius + radius0, 2);
+  residual(global_eqn_ids[1]) = - dvolume + 4 * M_PI * dradius * pow(radius + radius0, 2);
       
 }
