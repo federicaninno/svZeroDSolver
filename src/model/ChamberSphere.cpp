@@ -6,8 +6,8 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
-  Block::setup_dofs_(dofhandler, 7,
-                     {"radius", "velo", "stress", "tau", "volume"});
+  Block::setup_dofs_(dofhandler, 6,
+                     {"radius", "velo", "tau", "volume"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
@@ -142,20 +142,18 @@ void ChamberSphere::update_gradient(
   auto Pout = y[global_var_ids[2]];  
   auto Qout = y[global_var_ids[3]];  
   auto radius = y[global_var_ids[4]];  
-  auto velo = y[global_var_ids[5]];  
-  auto stress = y[global_var_ids[6]];  
-  auto tau = y[global_var_ids[7]];  
-  auto volume = y[global_var_ids[8]]; 
+  auto velo = y[global_var_ids[5]];    
+  auto tau = y[global_var_ids[6]];  
+  auto volume = y[global_var_ids[7]]; 
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
   auto dPout = dy[global_var_ids[2]];  
   auto dQout = dy[global_var_ids[3]];  
   auto dradius = dy[global_var_ids[4]];  
-  auto dvelo = dy[global_var_ids[5]];  
-  auto dstress = dy[global_var_ids[6]];  
-  auto dtau = dy[global_var_ids[7]];  
-  auto dvolume = dy[global_var_ids[8]];  
+  auto dvelo = dy[global_var_ids[5]];   
+  auto dtau = dy[global_var_ids[6]];  
+  auto dvolume = dy[global_var_ids[7]];  
 
   auto thick0 = alpha[global_param_ids[0]];
   auto radius0 = alpha[global_param_ids[1]];
@@ -163,43 +161,84 @@ void ChamberSphere::update_gradient(
   double rho = 1000.0;
   double W1 = 1472.0;      
   double W2 = 40.0;        
-  double sigma_max = 0.0;  
   double eta = 25.0;
 
-  // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
-  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =
-      dvelo * rho + stress/radius0 + radius * stress/pow(radius0, 2);
+  // ----- helper terms -----
+  //double CG = pow(1.0 + radius / radius0, 2.0);
+  //if (CG < 1e-12) CG = 1e-12;
+  //double dCG = 2.0 * (1.0 + radius / radius0) * (1.0 / radius0) * dradius;
+  //double A = (thick0 / radius0) * (1.0 + radius / radius0);
+  //double B = rho * thick0 * dvelo;
 
-  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) =
-      (2*Pout*radius*(radius + radius0) - radius*stress*thick0 - stress*thick0*(radius + radius0))/pow(radius0, 3);
+  // double s_expr = tau
+                //+ 4.0 * (1.0 - pow(CG, -3.0)) * (W1 + CG * W2)
+                //+ 2.0 * eta * dCG * (1.0 - 2.0 * pow(CG, -6.0));
 
-  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) =
-       4*(-radius0*(radius + radius0)*(12*dradius*eta*(2*pow(radius0, 11) - pow(radius + radius0, 11)) + 
-       6*pow(radius + radius0, 5)*(pow(radius0, 5) - pow(radius + radius0, 5))*(W1*pow(radius0, 2) + 
-       W2*pow(radius + radius0, 2)) + 2*pow(radius + radius0, 5)*(pow(radius0, 6) - 
-       pow(radius + radius0, 6))*(W1*radius0 + W2*(radius + radius0)) + 5*pow(radius + radius0, 4)*(pow(radius0, 6) - 
-       pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))) + 
-       11*radius0*(dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) + 
-       pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + 
-       W2*pow(radius + radius0, 2))) + 2*(radius + radius0)*(dradius*eta*(2*pow(radius0, 12) - 
-       pow(radius + radius0, 12)) + pow(radius + radius0, 5)*(pow(radius0, 6) - 
-       pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2))))/(pow(radius0, 3)*pow(radius + radius0, 12));
+  // --- local least-squares solve for s* ---
+  double w1 = 10.0, w2 = 1.0;
 
-  jacobian.coeffRef(global_eqn_ids[2], global_param_ids[1]) =
-       8*M_PI*velo*(radius + radius0);
+  //double A = (thick0 / radius0) * (1.0 + radius / radius0);
+  //double B = rho * thick0 * dvelo;
+  //num = w1*w1 * A * (Pout * CG - B) + w2*w2 * s_expr;
+  //den = w1*w1 * A*A + w2*w2;
+  //if (den < 1e-24) den = 1e-24;
+  //double s_star = (w1*w1 * ((thick0 / radius0) * (1.0 + radius / radius0)) * (Pout * (pow(1.0 + radius / radius0, 2.0)) 
+     //- (rho * thick0 * dvelo)) + w2*w2 * (tau + 4.0 * (1.0 - pow(pow(1.0 + radius / radius0, 2.0), -3.0)) * (W1 + (pow(1.0 + radius / radius0, 2.0)) * W2) 
+     //+ 2.0 * eta * (2.0 * (1.0 + radius / radius0) * (1.0 / radius0) * dradius) * (1.0 - 2.0 * pow(pow(1.0 + radius / radius0, 2.0), -6.0)))) / (w1*w1 * pow((thick0 / radius0) * (1.0 + radius / radius0),2) + w2*w2);
+
+  // JACOBIAN
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) = w1*(dvelo*rho*pow(pow(radius0, 4)*pow(w2, 2) 
+       + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 18.0) 
+       - 2*pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2)*(radius + radius0)*(thick0*pow(w1, 2)*(radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) - dvelo*rho*thick0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       + pow(w2, 2)*(-4.0*dradius*eta*(2.0 - 1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0))*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) 
+       + pow(radius0, 2)*tau*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       - 4.0*pow(radius0, 2)*(1 - pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0))*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       - thick0*pow(w1, 2)*(radius + radius0)*(radius + 1.0*radius0)*(-Pout*pow((radius + 1.0*radius0)/radius0, 2.0) 
+       + 2*dvelo*rho*thick0)*(pow(radius0, 4)*pow(w2, 2) 
+       + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 18.0) 
+       + (radius + radius0)*(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2))*(thick0*pow(w1, 2)*(radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) 
+       - dvelo*rho*thick0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       + pow(w2, 2)*(-4.0*dradius*eta*(2.0 - 1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0))*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) + pow(radius0, 2)*tau*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       - 4.0*pow(radius0, 2)*(1 - pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0))*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), -18.0)/pow(pow(radius0, 4)*pow(w2, 2) 
+       + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2);
+
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) = w1*pow((radius + 1.0*radius0)/radius0, -2.0)*(2*Pout*radius*pow((radius + 1.0*radius0)/radius0, 2.0)*(radius + radius0)*pow(pow(radius0, 4)*pow(w2, 2) 
+       + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 36.0) 
+       + 2*pow(radius0, 2)*pow(thick0, 3)*pow(w1, 2)*pow((radius + 1.0*radius0)/radius0, 2.0)*(radius + radius0)*(radius + 1.0*radius0)*(2*radius + 1.0*radius0)*(thick0*pow(w1, 2)*(radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) 
+       - dvelo*rho*thick0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) - pow(w2, 2)*(4.0*dradius*eta*(2.0 - 1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0))*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) - pow(radius0, 2)*tau*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       + 4.0*pow(radius0, 2)*(1 - pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0))*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 27.0) 
+       - pow(radius0, 2)*thick0*pow((radius + 1.0*radius0)/radius0, 2.0)*(2*radius + radius0)*(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2))*(thick0*pow(w1, 2)*(radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) 
+       - dvelo*rho*thick0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) - pow(w2, 2)*(4.0*dradius*eta*(2.0 - 1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0))*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) - pow(radius0, 2)*tau*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       + 4.0*pow(radius0, 2)*(1 - pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0))*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 27.0) 
+       - radius0*thick0*(radius + radius0)*(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2))*(radius0*thick0*pow(w1, 2)*pow((radius + 1.0*radius0)/radius0, 2.0)*(2.0*Pout*radius*pow((radius + 1.0*radius0)/radius0, 2.0) + radius*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) - dvelo*rho*thick0) 
+       + (radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) - dvelo*rho*thick0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 18.0) + pow(w2, 2)*(8.0*W2*radius*pow(radius0, 2)*pow((radius + 1.0*radius0)/radius0, 3.0)*(pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) - 1)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 15.0) + 96.0*dradius*eta*radius*pow((radius + 1.0*radius0)/radius0, 1.0)*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 12.0) + 4.0*dradius*eta*radius0*pow((radius + 1.0*radius0)/radius0, 2.0)*(2*radius + radius0)*(1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0) - 2.0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 12.0) 
+       + 24.0*radius*pow(radius0, 2)*pow((radius + 1.0*radius0)/radius0, 1.0)*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 15.0)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 18.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), -36.0)/(pow(radius0, 3)*pow(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2));
+
+  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[0]) = pow(radius0, 2)*pow(w1, 2)*w2*(radius + 1.0*radius0)*(2*thick0*(radius + 1.0*radius0)*(thick0*pow(w1, 2)*(radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) 
+       - dvelo*rho*thick0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       - pow(w2, 2)*(4.0*dradius*eta*(2.0 - 1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0))*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) 
+       - pow(radius0, 2)*tau*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) 
+       + 4.0*pow(radius0, 2)*(1 - pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0))*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0))) 
+       - (Pout*pow((radius + 1.0*radius0)/radius0, 2.0) - 2*dvelo*rho*thick0)*(pow(radius0, 4)*pow(w2, 2) 
+       + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), -9.0)/pow(pow(radius0, 4)*pow(w2, 2) 
+       + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2);
+  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) = w2*pow((radius + 1.0*radius0)/radius0, -2.0)*(-2*pow(radius0, 4)*pow(thick0, 2)*pow(w1, 2)*pow((radius + 1.0*radius0)/radius0, 2.0)*pow(radius + radius0, 12)*(radius + 1.0*radius0)*(2*radius + 1.0*radius0)*(thick0*pow(w1, 2)*(radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) - dvelo*rho*thick0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) - pow(w2, 2)*(4.0*dradius*eta*(2.0 - 1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0))*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) - pow(radius0, 2)*tau*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) + 4.0*pow(radius0, 2)*(1 - pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0))*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 18.0) + pow(radius0, 3)*pow(radius + radius0, 12)*(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2))*(radius0*thick0*pow(w1, 2)*pow((radius + 1.0*radius0)/radius0, 2.0)*(2.0*Pout*radius*pow((radius + 1.0*radius0)/radius0, 2.0) + radius*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) - dvelo*rho*thick0) + (radius + 1.0*radius0)*(Pout*pow((radius + 1.0*radius0)/radius0, 2.0) - dvelo*rho*thick0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 18.0) + pow(w2, 2)*(8.0*W2*radius*pow(radius0, 2)*pow((radius + 1.0*radius0)/radius0, 3.0)*(pow(pow((radius + 1.0*radius0)/radius0, 2.0), 3.0) - 1)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 15.0) + 96.0*dradius*eta*radius*pow((radius + 1.0*radius0)/radius0, 1.0)*(radius + radius0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 12.0) + 4.0*dradius*eta*radius0*pow((radius + 1.0*radius0)/radius0, 2.0)*(2*radius + radius0)*(1.0*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 6.0) - 2.0)*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 12.0) + 24.0*radius*pow(radius0, 2)*pow((radius + 1.0*radius0)/radius0, 1.0)*(W1 + W2*pow((radius + 1.0*radius0)/radius0, 2.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 15.0)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 9.0) - 4*radius0*pow((radius + 1.0*radius0)/radius0, 2.0)*(radius + radius0)*pow(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2)*(12*dradius*eta*(2*pow(radius0, 11) - pow(radius + radius0, 11)) + 6*pow(radius + radius0, 5)*(pow(radius0, 5) - pow(radius + radius0, 5))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2)) + 2*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*radius0 + W2*(radius + radius0)) + 5*pow(radius + radius0, 4)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 27.0) + 44*radius0*pow((radius + 1.0*radius0)/radius0, 2.0)*pow(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2)*(dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) + pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 27.0) + 8*pow((radius + 1.0*radius0)/radius0, 2.0)*(radius + radius0)*pow(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2)*(dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) + pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2)))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), 27.0))*pow(pow((radius + 1.0*radius0)/radius0, 2.0), -27.0)/(pow(radius0, 3)*pow(radius + radius0, 12)*pow(pow(radius0, 4)*pow(w2, 2) + pow(thick0, 2)*pow(w1, 2)*pow(radius + 1.0*radius0, 2), 2));
+  
+  jacobian.coeffRef(global_eqn_ids[2], global_param_ids[1]) = 8.0 * M_PI * velo * (radius + radius0);
 
   // RESIDUALS
   residual(global_eqn_ids[0]) =
-      rho * thick0 * dvelo + (thick0/radius0) * (1 + (radius/radius0)) * stress -
-      Pout * (1 + (radius/radius0)) * (1 + (radius/radius0));
+      w1 * (rho * thick0 * dvelo + (thick0/radius0)*(1 + radius/radius0)*((w1*w1 * ((thick0 / radius0) * (1.0 + radius / radius0)) * (Pout * (pow(1.0 + radius / radius0, 2.0)) 
+      - (rho * thick0 * dvelo)) + w2*w2 * (tau + 4.0 * (1.0 - pow(pow(1.0 + radius / radius0, 2.0), -3.0)) * (W1 + (pow(1.0 + radius / radius0, 2.0)) * W2) 
+      + 2.0 * eta * (2.0 * (1.0 + radius / radius0) * (1.0 / radius0) * dradius) * (1.0 - 2.0 * pow(pow(1.0 + radius / radius0, 2.0), -6.0)))) / (w1*w1 * pow((thick0 / radius0) * (1.0 + radius / radius0),2) + w2*w2))
+      - Pout * pow(1 + radius/radius0, 2));
 
-  //Obtained from F, E and C above
-  residual(global_eqn_ids[1]) =  - stress + tau + 
-       4 * (dradius * eta * (-2 * pow(radius0, 12) + pow(radius + radius0, 12)) +
-       pow(radius + radius0, 5) * (-pow(radius0, 6) + 
-       pow(radius + radius0, 6)) * (W1 * pow(radius0, 2) + 
-       W2 * pow(radius + radius0, 2))) / (pow(radius0, 2) * pow(radius + radius0, 11));
+  residual(global_eqn_ids[1]) =
+      w2 * (-((w1*w1 * ((thick0 / radius0) * (1.0 + radius / radius0)) * (Pout * (pow(1.0 + radius / radius0, 2.0)) 
+     - (rho * thick0 * dvelo)) + w2*w2 * (tau + 4.0 * (1.0 - pow(pow(1.0 + radius / radius0, 2.0), -3.0)) * (W1 + (pow(1.0 + radius / radius0, 2.0)) * W2) 
+     + 2.0 * eta * (2.0 * (1.0 + radius / radius0) * (1.0 / radius0) * dradius) * (1.0 - 2.0 * pow(pow(1.0 + radius / radius0, 2.0), -6.0)))) / (w1*w1 * pow((thick0 / radius0) * (1.0 + radius / radius0),2) + w2*w2)) 
+     + tau + 4*(dradius*eta*(-2*pow(radius0,12)+pow(radius+radius0,12)) + pow(radius+radius0,5)*(-pow(radius0,6)
+     + pow(radius+radius0,6))*(W1*pow(radius0,2)+W2*pow(radius+radius0,2))) /(pow(radius0,2)*pow(radius+radius0,11)));
 
-  residual(global_eqn_ids[2]) = - dvolume + 4 * M_PI * velo * pow(radius + radius0, 2);
-      
+  residual(global_eqn_ids[2]) = -dvolume + 4*M_PI*velo*pow(radius+radius0,2);
 }
