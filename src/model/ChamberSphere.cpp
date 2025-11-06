@@ -6,8 +6,8 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
-  Block::setup_dofs_(dofhandler, 7,
-                     {"radius", "velo", "stress", "tau", "volume"});
+  Block::setup_dofs_(dofhandler, 6,
+                     {"radius", "stress", "volume", "time"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
@@ -142,20 +142,22 @@ void ChamberSphere::update_gradient(
   auto Pout = y[global_var_ids[2]];  
   auto Qout = y[global_var_ids[3]];  
   auto radius = y[global_var_ids[4]];  
-  auto velo = y[global_var_ids[5]];  
-  auto stress = y[global_var_ids[6]];  
-  auto tau = y[global_var_ids[7]];  
-  auto volume = y[global_var_ids[8]]; 
+  //auto velo = y[global_var_ids[5]];  
+  auto stress = y[global_var_ids[5]];  
+  //auto tau = y[global_var_ids[6]];  
+  auto volume = y[global_var_ids[6]];
+  auto time = y[global_var_ids[7]];
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
   auto dPout = dy[global_var_ids[2]];  
   auto dQout = dy[global_var_ids[3]];  
   auto dradius = dy[global_var_ids[4]];  
-  auto dvelo = dy[global_var_ids[5]];  
-  auto dstress = dy[global_var_ids[6]];  
-  auto dtau = dy[global_var_ids[7]];  
-  auto dvolume = dy[global_var_ids[8]];  
+  //auto dvelo = dy[global_var_ids[5]];  
+  auto dstress = dy[global_var_ids[5]];  
+  //auto dtau = dy[global_var_ids[6]];  
+  auto dvolume = dy[global_var_ids[6]];
+  auto dt = dy[global_var_ids[7]];  
 
   auto thick0 = alpha[global_param_ids[0]];
   auto radius0 = alpha[global_param_ids[1]];
@@ -165,6 +167,48 @@ void ChamberSphere::update_gradient(
   double W2 = 40.0;        
   double sigma_max = 0.0;  
   double eta = 25.0;
+  double alpha_max = 0.0;
+  double alpha_min = 0.0;
+  double tsys = 0.0;
+  double tdias = 0.0;
+  double steepness = 1e-9; // Avoid division by zero in S_plus and S_minus
+  //const double dt = 0.0081; 
+
+  // REMOVE VELO
+  // Initialize at the first call
+  if (!initialized) {
+    dradius_prev = dradius; 
+    tau_prev = 0.0; // first value
+    initialized = true;
+   }
+
+  // Compute second derivative
+  auto dvelo = (dradius - dradius_prev) / dt;
+
+  // Store for next step
+  dradius_prev = dradius;
+
+  auto velo = dradius;
+
+  // REMOVE TAU
+  // Compute act and act_plus
+  const auto T_cardiac = 1.6119; // This should not be hardcoded
+  double t_in_cycle = fmod(time, T_cardiac);
+
+  // Same logic as in get_elastance_values
+  const double S_plus = 0.5 * (1.0 + tanh((t_in_cycle - tsys) / steepness));
+  const double S_minus = 0.5 * (1.0 - tanh((t_in_cycle - tdias) / steepness));
+
+  const double f = S_plus * S_minus;
+
+  const double act_t = alpha_max * f + alpha_min * (1 - f);
+
+  act = std::abs(act_t);
+  act_plus = std::max(act_t, 0.0);
+
+  auto tau_new = (tau_prev + dt * sigma_max * act_plus) / (1.0 + dt * act);
+  tau_prev = tau_new;
+  auto tau = tau_new;
 
   // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =

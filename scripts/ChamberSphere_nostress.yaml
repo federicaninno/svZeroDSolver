@@ -1,0 +1,73 @@
+variables:
+  - Pin
+  - Qin
+  - Pout
+  - Qout
+  - radius
+  - velo
+  - stress
+  - tau
+  - volume
+
+derivatives:
+  - dPin_dt
+  - dQin_dt
+  - dPout_dt
+  - dQout_dt
+  - dradius_dt
+  - dvelo_dt
+  - dstress_dt
+  - dtau_dt
+  - dvolume_dt
+
+constants:
+  - rho
+  - thick0
+  - radius0
+  - W1
+  - W2
+  - eta
+  - act
+  - act_plus
+  - sigma_max
+  - w1
+  - w2
+
+time_dependent:
+  - act
+  - act_plus
+
+helper_functions: |
+  def CG(radius):
+      return (1 + (radius / radius0)) ** 2
+
+  def dCG(radius, dradius_dt):
+      return 2 * (1 + (radius / radius0)) * (1 / radius0) * dradius_dt
+
+  def s_expr(tau, radius, dradius_dt):
+      CG_val = CG(radius)
+      dCG_val = dCG(radius, dradius_dt)
+      return tau + 4 * (1 - CG_val ** -3) * (W1 + CG_val * W2) + 2 * eta * dCG_val * (1 - 2 * CG_val ** -6)
+
+  def A(dvelo_dt, radius):
+      return rho * thick0 * dvelo_dt + (thick0 / radius0) * (1 + (radius / radius0))
+
+  def b(Pout, radius):
+      CG_val = CG(radius)
+      return Pout * CG_val
+  
+  def s_star(dvelo_dt, radius, Pout, tau, dradius_dt):
+      A_val = A(dvelo_dt, radius)
+      b_val = b(Pout, radius)
+      s_expr_val = s_expr(tau, radius, dradius_dt)
+      return ((w1 ** 2) * A_val * b_val + (w2 ** 2) * s_expr_val) / (((w1 * A_val) ** 2) + (w2 ** 2))
+  
+
+residuals:
+  - w1 * (A(dvelo_dt, radius) * s_star(dvelo_dt, radius, Pout, tau, dradius_dt) - b(Pout, radius))
+  - w2 * (-s_star(dvelo_dt, radius, Pout, tau, dradius_dt) + tau + 4 * (1 - CG(radius) ** -3) * (W1 + CG(radius) * W2) + 2 * eta * dCG(radius, dradius_dt) * (1 - 2 * CG(radius) ** -6))
+  - 4 * pi * radius0 ** 2 * CG(radius) * velo - dvolume_dt
+  - dtau_dt + act * tau - sigma_max * act_plus
+  - dradius_dt - velo
+  - Qin - Qout - dvolume_dt
+  - Pin - Pout
