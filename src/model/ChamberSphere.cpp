@@ -7,7 +7,7 @@
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
   Block::setup_dofs_(dofhandler, 7,
-                     {"radius", "velo", "stress", "tau", "volume"});
+                     {"radius", "velo", "stress", "volume", "time"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
@@ -144,8 +144,9 @@ void ChamberSphere::update_gradient(
   auto radius = y[global_var_ids[4]];  
   auto velo = y[global_var_ids[5]];  
   auto stress = y[global_var_ids[6]];  
-  auto tau = y[global_var_ids[7]];  
-  auto volume = y[global_var_ids[8]]; 
+  //auto tau = y[global_var_ids[7]];  
+  auto volume = y[global_var_ids[7]];
+  auto time = y[global_var_ids[8]];
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
@@ -154,8 +155,9 @@ void ChamberSphere::update_gradient(
   auto dradius = dy[global_var_ids[4]];  
   auto dvelo = dy[global_var_ids[5]];  
   auto dstress = dy[global_var_ids[6]];  
-  auto dtau = dy[global_var_ids[7]];  
-  auto dvolume = dy[global_var_ids[8]];  
+  //auto dtau = dy[global_var_ids[7]];  
+  auto dvolume = dy[global_var_ids[7]];
+  auto dt = dy[global_var_ids[8]]; 
 
   auto thick0 = alpha[global_param_ids[0]];
   auto radius0 = alpha[global_param_ids[1]];
@@ -165,6 +167,32 @@ void ChamberSphere::update_gradient(
   double W2 = 20.0;        
   double sigma_max = 0.0;  
   double eta = 5.0;
+
+   // REMOVE TAU
+  // Initialize at the first call
+  if (!initialized) {
+    tau_prev = 0.0; // first value
+    initialized = true;
+   }
+
+  // Compute act and act_plus
+  const auto T_cardiac = 1.6119; // This should not be hardcoded
+  double t_in_cycle = fmod(time, T_cardiac);
+
+  // Same logic as in get_elastance_values
+  const double S_plus = 0.5 * (1.0 + tanh((t_in_cycle - tsys) / steepness));
+  const double S_minus = 0.5 * (1.0 - tanh((t_in_cycle - tdias) / steepness));
+
+  const double f = S_plus * S_minus;
+
+  const double act_t = alpha_max * f + alpha_min * (1 - f);
+
+  act = std::abs(act_t);
+  act_plus = std::max(act_t, 0.0);
+
+  auto tau_new = (tau_prev + dt * sigma_max * act_plus) / (1.0 + dt * act);
+  tau_prev = tau_new;
+  auto tau = tau_new;
 
   // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =
