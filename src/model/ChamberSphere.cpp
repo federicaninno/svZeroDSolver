@@ -161,10 +161,10 @@ void ChamberSphere::update_gradient(
   auto radius0 = alpha[global_param_ids[1]];
   // These parameters should not be hardcoded
   double rho = 1000.0;
-  double W1 = 1472.0;      
-  double W2 = 40.0;        
+  double W1 = 20e4;      
+  double W2 = 20.0;        
   double sigma_max = 0.0;  
-  double eta = 25.0;
+  double eta = 5.0;
 
   // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) =
