@@ -170,8 +170,7 @@ class ChamberSphere : public Block {
                {"alpha_min", InputParameter()},
                {"tsys", InputParameter()},
                {"tdias", InputParameter()},
-               {"steepness", InputParameter()}}), 
-               initialized(false) {}
+               {"steepness", InputParameter()}}) {}
 
   /**
    * @brief Set up the degrees of freedom (DOF) of the block
@@ -241,9 +240,10 @@ class ChamberSphere : public Block {
                        Eigen::Matrix<double, Eigen::Dynamic, 1> &residual,
                        Eigen::Matrix<double, Eigen::Dynamic, 1> &alpha,
                        std::vector<double> &y, std::vector<double> &dy);
-   private:
-    double tau_prev;  // stores the previous tau value
-    bool initialized;     // marks first-time initialization
+   public:
+    double dradius_prev_global;
+    double tau_prev_global;  // stores the previous tau value
+    bool globals_initialized;     // marks first-time initialization
 
   /**
    * @brief Number of triplets of element

@@ -2,6 +2,7 @@
 // University of California, and others. SPDX-License-Identifier: BSD-3-Clause
 #include "LevenbergMarquardtOptimizer.h"
 
+#include "ChamberSphere.h"
 #include <iomanip>
 
 LevenbergMarquardtOptimizer::LevenbergMarquardtOptimizer(
@@ -31,7 +32,6 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> LevenbergMarquardtOptimizer::run(
     std::vector<std::vector<double>>& dy_obs) {
 
   for (size_t i = 0; i < max_iter; ++i) {
-
     // Print current parameters (alpha) 
     std::cout << "Iteration " << i << " alpha = [";
     for (int idx = 0; idx < alpha.size(); ++idx) {
@@ -134,6 +134,18 @@ void LevenbergMarquardtOptimizer::update_gradient(
     Eigen::Matrix<double, Eigen::Dynamic, 1>& alpha,
     std::vector<std::vector<double>>& y_obs,
     std::vector<std::vector<double>>& dy_obs) {
+  
+  for (size_t j = 0; j < model->get_num_blocks(true); ++j) {
+      if (auto* chamber = dynamic_cast<ChamberSphere*>(model->get_block(j))) {
+        chamber->globals_initialized = false;
+        chamber->dradius_prev_global = 0.0;
+        chamber->tau_prev_global = 0.0;
+        std::cout << "[DEBUG] Reset globals for " 
+        << chamber->get_name() << std::endl;
+      }
+  }
+
+
   // Set jacobian and residual to zero
   jacobian.setZero();
   residual.setZero();

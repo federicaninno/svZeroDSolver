@@ -6,8 +6,8 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
-  Block::setup_dofs_(dofhandler, 6,
-                     {"radius", "velo", "volume", "time"});
+  Block::setup_dofs_(dofhandler, 5,
+                     {"radius", "volume", "time"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
@@ -142,37 +142,45 @@ void ChamberSphere::update_gradient(
   auto Pout = y[global_var_ids[2]];  
   auto Qout = y[global_var_ids[3]];  
   auto radius = y[global_var_ids[4]];  
-  auto velo = y[global_var_ids[5]];  
+  //auto velo = y[global_var_ids[5]];  
   //auto stress = y[global_var_ids[6]];  
   //auto tau = y[global_var_ids[7]];  
-  auto volume = y[global_var_ids[6]];
-  auto time = y[global_var_ids[7]];
+  auto volume = y[global_var_ids[5]];
+  auto time = y[global_var_ids[6]];
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
   auto dPout = dy[global_var_ids[2]];  
   auto dQout = dy[global_var_ids[3]];  
   auto dradius = dy[global_var_ids[4]];  
-  auto dvelo = dy[global_var_ids[5]];  
+  //auto dvelo = dy[global_var_ids[5]];  
   //auto dstress = dy[global_var_ids[6]];  
   //auto dtau = dy[global_var_ids[7]];  
-  auto dvolume = dy[global_var_ids[6]];
-  auto dt = dy[global_var_ids[7]]; 
+  auto dvolume = dy[global_var_ids[5]];
+  auto dt = dy[global_var_ids[6]]; 
 
   auto thick0 = alpha[global_param_ids[0]];
   auto radius0 = alpha[global_param_ids[1]];
   // These parameters should not be hardcoded
   double rho = 1000.0;
   double W1 = 20e4;      
-  double W2 = 20.0;        
-  double sigma_max = 0.0;  
+  double W2 = 20.0;          
   double eta = 5.0;
-
-   // REMOVE TAU
-  // Initialize at the first call
-  if (!initialized) {
-    tau_prev = 0.0; // first value
-    initialized = true;
+  double sigma_max = 185e3;
+  double alpha_max = 30.0;
+  double alpha_min = -30.0;
+  double tsys = 0.170;
+  double tdias = 0.484;
+  double steepness = 0.005;
+  
+  //std::cout << "[DEBUG] globals_initialized before check = " 
+         //<< globals_initialized 
+         //<< " dradius_prev_global=" << dradius_prev_global
+         //<< " tau_prev_global=" << tau_prev_global << std::endl;
+          
+  if (!globals_initialized) {
+    std::cout << "[DEBUG] Reinitializing global state for " << this->get_name() << std::endl;
+    globals_initialized = true;
    }
 
   // Compute act and act_plus
@@ -190,13 +198,18 @@ void ChamberSphere::update_gradient(
   act = std::abs(act_t);
   act_plus = std::max(act_t, 0.0);
 
-  auto tau_new = (tau_prev + dt * sigma_max * act_plus) / (1.0 + dt * act);
-  tau_prev = tau_new;
-  auto tau = tau_new;
+  auto tau = (tau_prev_global + dt * sigma_max * act_plus) / (1.0 + dt * act);
+  // evolve the internal memory
+  tau_prev_global = tau;
+
+  auto ddradius = (dradius - dradius_prev_global) / dt;
+
+  // evolve the internal memory
+  dradius_prev_global = dradius;
 
   // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
   jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) = (-4*dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) 
-     + dvelo*pow(radius0, 4)*rho*pow(radius + radius0, 10) + pow(radius0, 2)*tau*pow(radius + radius0, 11) 
+     + ddradius*pow(radius0, 4)*rho*pow(radius + radius0, 10) + pow(radius0, 2)*tau*pow(radius + radius0, 11) 
      - 4*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
      + W2*pow(radius + radius0, 2)))/(pow(radius0, 4)*pow(radius + radius0, 10));
 
@@ -218,16 +231,16 @@ void ChamberSphere::update_gradient(
      + W2*pow(radius + radius0, 2)))))/(pow(radius0, 5)*pow(radius + radius0, 11));
 
   jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) =
-       8*M_PI*velo*(radius + radius0);
+       8*M_PI*dradius*(radius + radius0);
 
   // RESIDUALS
   residual(global_eqn_ids[0]) =
-     rho * thick0 * dvelo + (-Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
+     rho * thick0 * ddradius + (-Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
      + thick0*(4*dradius*eta*(-2*pow(radius0, 12) + pow(radius + radius0, 12)) 
      + pow(radius0, 2)*tau*pow(radius + radius0, 11) + 4*pow(radius + radius0, 5)*(-pow(radius0, 6) 
      + pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
      + W2*pow(radius + radius0, 2))))/(pow(radius0, 4)*pow(radius + radius0, 10));
 
-  residual(global_eqn_ids[1]) = - dvolume + 4 * M_PI * velo * pow(radius + radius0, 2);
-      
+  residual(global_eqn_ids[1]) = - dvolume + 4 * M_PI * dradius * pow(radius + radius0, 2);
+
 }
