@@ -46,6 +46,30 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> LevenbergMarquardtOptimizer::run(
     // Cost evaluation 
     double cost = 0.5 * residual.squaredNorm();
 
+    // ---- Add simple Gaussian priors / regularization ----
+    double mu_thick0 = 0.010;     // prior mean for thick0  (adjust units)
+    double mu_radius0 = 0.020;    // prior mean for radius0
+    double sigma_thick0 = 0.005;  // prior std (how much you trust the mean)
+    double sigma_radius0 = 0.005;
+    //double lambda_reg = 1.0;      // global scaling factor
+    double lambda_reg_thick0 = 1e4;  // strong pull
+    double lambda_reg_radius0 = 1.0;
+
+    double thick0 = alpha(0);     
+    double radius0 = alpha(1);   
+
+    //double reg_cost = 0.5 * lambda_reg * (
+      //pow((thick0 - mu_thick0)/sigma_thick0, 2.0) +
+      //pow((radius0 - mu_radius0)/sigma_radius0, 2.0)
+    //);
+    //cost += reg_cost;
+
+    double reg_cost = 0.5 * (
+    lambda_reg_thick0 * pow((thick0 - mu_thick0)/sigma_thick0, 2.0) +
+    lambda_reg_radius0 * pow((radius0 - mu_radius0)/sigma_radius0, 2.0)
+    );
+// ------------------------------------------------------
+
     // Backup J and r
     Eigen::SparseMatrix<double> jac_backup = jacobian;
     Eigen::Matrix<double, Eigen::Dynamic, 1> resid_backup = residual;
@@ -67,6 +91,19 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> LevenbergMarquardtOptimizer::run(
       // Evaluate trial cost to deco
       update_gradient(alpha_trial, y_obs, dy_obs);
       double cost_trial = 0.5 * residual.squaredNorm();
+
+      // ---- Add priors to trial cost ----
+      double thick0_trial = alpha_trial(0);
+      double radius0_trial = alpha_trial(1);
+   
+
+      double reg_cost_trial = 0.5 * (
+      lambda_reg_thick0 * pow((thick0 - mu_thick0)/sigma_thick0, 2.0) +
+      lambda_reg_radius0 * pow((radius0 - mu_radius0)/sigma_radius0, 2.0)
+      );
+      
+      cost_trial += reg_cost_trial;
+      // ----------------------------------
 
       std::cout << std::setprecision(1) << std::scientific
                 << "Iter " << i << " attempt " << attempts

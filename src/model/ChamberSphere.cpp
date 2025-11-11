@@ -6,8 +6,8 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
-  Block::setup_dofs_(dofhandler, 6,
-                     {"radius", "velo", "volume", "time"});
+  Block::setup_dofs_(dofhandler, 5,
+                     {"velo", "volume", "time"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
@@ -141,23 +141,23 @@ void ChamberSphere::update_gradient(
   auto Qin = y[global_var_ids[1]];  
   auto Pout = y[global_var_ids[2]];  
   auto Qout = y[global_var_ids[3]];  
-  auto radius = y[global_var_ids[4]];  
-  auto velo = y[global_var_ids[5]];  
+  //auto radius = y[global_var_ids[4]];  
+  auto velo = y[global_var_ids[4]];  
   //auto stress = y[global_var_ids[6]];  
   //auto tau = y[global_var_ids[7]];  
-  auto volume = y[global_var_ids[6]];
-  auto time = y[global_var_ids[7]];
+  auto volume = y[global_var_ids[5]];
+  auto time = y[global_var_ids[6]];
 
   auto dPin = dy[global_var_ids[0]];  
   auto dQin = dy[global_var_ids[1]];  
   auto dPout = dy[global_var_ids[2]];  
   auto dQout = dy[global_var_ids[3]];  
-  auto dradius = dy[global_var_ids[4]];  
-  auto dvelo = dy[global_var_ids[5]];  
+  //auto dradius = dy[global_var_ids[4]];  
+  auto dvelo = dy[global_var_ids[4]];  
   //auto dstress = dy[global_var_ids[6]];  
   //auto dtau = dy[global_var_ids[7]];  
-  auto dvolume = dy[global_var_ids[6]];
-  auto dt = dy[global_var_ids[7]]; 
+  auto dvolume = dy[global_var_ids[5]];
+  auto dt = dy[global_var_ids[6]]; 
 
   auto thick0 = alpha[global_param_ids[0]];
   auto radius0 = alpha[global_param_ids[1]];
@@ -194,40 +194,13 @@ void ChamberSphere::update_gradient(
   tau_prev = tau_new;
   auto tau = tau_new;
 
-  // JACOBIAN obtained with SymPy - I checked whether manually or obtained with SymPy makes a difference
-  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) = (-4*dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) 
-     + dvelo*pow(radius0, 4)*rho*pow(radius + radius0, 10) + pow(radius0, 2)*tau*pow(radius + radius0, 11) 
-     - 4*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
-     + W2*pow(radius + radius0, 2)))/(pow(radius0, 4)*pow(radius + radius0, 10));
+  // JACOBIAN obtained with SymPy taking into account regularization
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[0]) = pow(M_PI, -1.666666666666667)*pow(volume, -5.333333333333333)*(-1.0*pow(M_PI, 0.66666666666666663)*dvolume*eta*pow(volume, 2.0)*(6.3209876543209873*pow(M_PI, 4.0)*pow(radius0, 12) - pow(volume, 4.0))*pow(1.0/volume, 0.66666666666666663) - 0.90856029641606983*pow(M_PI, 0.66666666666666674)*pow(volume, 3.6666666666666665)*(7.1111111111111107*pow(M_PI, 2.0)*pow(radius0, 6) - 4*pow(volume, 2.0))*(pow(M_PI, 0.66666666666666663)*W1*pow(radius0, 2) + 0.82548181222365669*W2*pow(volume, 0.66666666666666663)) + 0.90856029641606983*pow(M_PI, 1.3333333333333335)*pow(radius0, 2)*tau*pow(volume, 5.6666666666666661) + pow(M_PI, 1.666666666666667)*dvelo*pow(radius0, 4)*rho*pow(volume, 5.333333333333333))/pow(radius0, 4);
 
-  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) = (-radius0*(radius + radius0)*(12*Pout*pow(radius0, 2)*pow(radius + radius0, 11) 
-     + 2*Pout*radius0*pow(radius + radius0, 12) + thick0*(48*dradius*eta*(2*pow(radius0, 11) 
-     - pow(radius + radius0, 11)) - 11*pow(radius0, 2)*tau*pow(radius + radius0, 10) 
-     - 2*radius0*tau*pow(radius + radius0, 11) + 24*pow(radius + radius0, 5)*(pow(radius0, 5) 
-     - pow(radius + radius0, 5))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2)) 
-     + 8*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*radius0 + W2*(radius + radius0)) 
-     + 20*pow(radius + radius0, 4)*(pow(radius0, 6) - pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
-     + W2*pow(radius + radius0, 2)))) + 10*radius0*(Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
-     + thick0*(4*dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) 
-     - pow(radius0, 2)*tau*pow(radius + radius0, 11) + 4*pow(radius + radius0, 5)*(pow(radius0, 6) 
-     - pow(radius + radius0, 6))*(W1*pow(radius0, 2) + W2*pow(radius + radius0, 2)))) 
-     + 4*(radius + radius0)*(Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
-     + thick0*(4*dradius*eta*(2*pow(radius0, 12) - pow(radius + radius0, 12)) 
-     - pow(radius0, 2)*tau*pow(radius + radius0, 11) + 4*pow(radius + radius0, 5)*(pow(radius0, 6) 
-     - pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
-     + W2*pow(radius + radius0, 2)))))/(pow(radius0, 5)*pow(radius + radius0, 11));
+  jacobian.coeffRef(global_eqn_ids[0], global_param_ids[1]) = -4.0*1.0/M_PI*dvolume*eta*thick0*pow(volume, 0.66666666666666696)*pow(1.0/volume, 0.66666666666666663)/pow(radius0, 5) - 12.0*pow(M_PI, -0.99999999999999956)*W2*thick0*pow(volume, 1.0)/pow(radius0, 5) + 1.6509636244473134*pow(M_PI, -0.66666666666666607)*Pout*pow(volume, 0.66666666666666696)/pow(radius0, 3) - 7.2684823713285587*pow(M_PI, -0.33333333333333304)*W1*thick0*pow(volume, 0.33333333333333304)/pow(radius0, 3) - 1.8171205928321397*pow(M_PI, -0.33333333333333304)*tau*thick0*pow(volume, 0.33333333333333304)/pow(radius0, 3) - 10.666666666666668*pow(M_PI, 1.0000000000000009)*W2*radius0*thick0*1.0/volume - 25.843492875834873*pow(M_PI, 1.6666666666666661)*W1*pow(radius0, 3)*thick0*pow(volume, -1.666666666666667) - 50.567901234567898*pow(M_PI, 3.0)*dvolume*eta*pow(radius0, 7)*thick0*pow(volume, -3.3333333333333335)*pow(1.0/volume, 0.66666666666666663);
 
-  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[1]) =
-       8*M_PI*velo*(radius + radius0);
 
   // RESIDUALS
   residual(global_eqn_ids[0]) =
-     rho * thick0 * dvelo + (-Pout*pow(radius0, 2)*pow(radius + radius0, 12) 
-     + thick0*(4*dradius*eta*(-2*pow(radius0, 12) + pow(radius + radius0, 12)) 
-     + pow(radius0, 2)*tau*pow(radius + radius0, 11) + 4*pow(radius + radius0, 5)*(-pow(radius0, 6) 
-     + pow(radius + radius0, 6))*(W1*pow(radius0, 2) 
-     + W2*pow(radius + radius0, 2))))/(pow(radius0, 4)*pow(radius + radius0, 10));
-
-  residual(global_eqn_ids[1]) = - dvolume + 4 * M_PI * velo * pow(radius + radius0, 2);
-      
+     rho * thick0 * dvelo + pow(M_PI, -2.3333333333333335)*pow(volume, -5.333333333333333)*(-0.82548181222365669*pow(M_PI, 1.6666666666666667)*Pout*pow(radius0, 2)*pow(volume, 6.0) + 0.90856029641606983*pow(M_PI, 0.66666666666666663)*thick0*(1.1006424162982089*pow(M_PI, 0.66666666666666663)*dvolume*eta*pow(volume, 2.0)*(-6.3209876543209873*pow(M_PI, 4.0)*pow(radius0, 12) + pow(volume, 4.0))*pow(1.0/volume, 0.66666666666666663) + pow(M_PI, 1.3333333333333335)*pow(radius0, 2)*tau*pow(volume, 5.6666666666666661) + pow(M_PI, 0.66666666666666674)*pow(volume, 3.6666666666666665)*(-7.1111111111111107*pow(M_PI, 2.0)*pow(radius0, 6) + 4*pow(volume, 2.0))*(pow(M_PI, 0.66666666666666663)*W1*pow(radius0, 2) + 0.82548181222365669*W2*pow(volume, 0.66666666666666663))))/pow(radius0, 4);
 }
