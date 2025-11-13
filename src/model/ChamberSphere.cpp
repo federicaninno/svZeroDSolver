@@ -4,7 +4,6 @@
 #include "ChamberSphere.h"
 
 #include "Model.h"
-#include <fstream>
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
   Block::setup_dofs_(dofhandler, 4,

@@ -4,6 +4,7 @@
 
 #include "ChamberSphere.h"
 #include <iomanip>
+#include <fstream>
 
 LevenbergMarquardtOptimizer::LevenbergMarquardtOptimizer(
     Model* model, int num_obs, int num_params, double lambda0, double tol_grad,
@@ -30,6 +31,11 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> LevenbergMarquardtOptimizer::run(
     Eigen::Matrix<double, Eigen::Dynamic, 1> alpha,
     std::vector<std::vector<double>>& y_obs,
     std::vector<std::vector<double>>& dy_obs) {
+
+    // ----------------------------------------------------------
+    // 1. OPTIONAL: Perform a parameter sweep BEFORE optimization
+    // ----------------------------------------------------------
+    perform_parameter_sweep(alpha, y_obs, dy_obs);
 
   for (size_t i = 0; i < max_iter; ++i) {
     // Print current parameters (alpha) 
@@ -121,7 +127,7 @@ Eigen::Matrix<double, Eigen::Dynamic, 1> LevenbergMarquardtOptimizer::run(
 
     // Stopping conditions
     if ((norm_grad < tol_grad) && (norm_inc < tol_inc)) {
-      std::cout << "Converged: gradient or increment below tolerance.\n";
+      std::cout << "Converged: gradient and increment below tolerance.\n";
       break;
     }
   } // end iterations
@@ -245,3 +251,58 @@ void LevenbergMarquardtOptimizer::update_delta(bool /*first_step*/) {
   // Solve for delta
   delta = mat.llt().solve(vec);
 }
+
+void LevenbergMarquardtOptimizer::perform_parameter_sweep(
+    Eigen::Matrix<double, Eigen::Dynamic, 1> alpha,
+    std::vector<std::vector<double>>& y_obs,
+    std::vector<std::vector<double>>& dy_obs)
+{
+    std::ofstream file("sweep_output.csv");
+    file << "thick0,radius0,cost\n";
+
+    int idx_thick0  = -1;
+    int idx_radius0 = -1;
+
+  // Find the chamber block (the one with thick0, radius0)
+  for (size_t j = 0; j < model->get_num_blocks(true); ++j) {
+    auto* chamber = dynamic_cast<ChamberSphere*>(model->get_block(j));
+    if (chamber) {
+        idx_thick0  = chamber->global_param_ids[0];
+        idx_radius0 = chamber->global_param_ids[1];
+        break;
+    }
+  }
+
+  if (idx_thick0 < 0 || idx_radius0 < 0) {
+    std::cerr << "[SWEEP] ERROR: Could not find ChamberSphere parameter indices.\n";
+    return;
+  }
+
+    double thick_min  = 1e-8, thick_max  = 1e-3;
+    double radius_min = 0.04,   radius_max = 10;
+
+    int N = 40;
+
+    for (int i = 0; i < N; ++i) {
+        double thick0 = thick_min + i * (thick_max - thick_min) / (N - 1);
+        for (int j = 0; j < N; ++j) {
+            double radius0 = radius_min + j * (radius_max - radius_min) / (N - 1);
+
+            // modify parameters
+            Eigen::Matrix<double, Eigen::Dynamic, 1> a = alpha;
+            a[idx_thick0]  = thick0;
+            a[idx_radius0] = radius0;
+
+            // ---- THIS is where the magic happens ----
+            update_gradient(a, y_obs, dy_obs);
+
+            double cost = 0.5 * residual.squaredNorm();
+
+            file << thick0 << "," << radius0 << "," << cost << "\n";
+        }
+    }
+
+    file.close();
+    std::cout << "[SWEEP] Saved sweep_output.csv\n";
+}
+
