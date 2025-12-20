@@ -110,6 +110,7 @@ class LevenbergMarquardtOptimizer {
   Eigen::Matrix<double, Eigen::Dynamic, 1> delta;
   Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic> mat;
   Eigen::Matrix<double, Eigen::Dynamic, 1> vec;
+  Eigen::VectorXd param_scale;
   Model* model;
   double lambda;
 
@@ -128,11 +129,6 @@ class LevenbergMarquardtOptimizer {
                        std::vector<std::vector<double>>& dy_obs);
 
   void update_delta(bool first_step);
-
-  void perform_parameter_sweep(
-    Eigen::Matrix<double, Eigen::Dynamic, 1> alpha,
-    std::vector<std::vector<double>>& y_obs,
-    std::vector<std::vector<double>>& dy_obs);
 };
 
 #endif  // SVZERODSOLVER_OPTIMIZE_LEVENBERGMARQUARDT_HPP_

@@ -137,27 +137,6 @@ void ChamberSphere::update_gradient(
     Eigen::Matrix<double, Eigen::Dynamic, 1>& residual,
     Eigen::Matrix<double, Eigen::Dynamic, 1>& alpha, std::vector<double>& y,
     std::vector<double>& dy) {
-
-  // Added to trigger parameter sweep only once
-  // --- sweep guard flags ---
-  //static bool sweep_done = false;
-  //static bool in_sweep   = false;
-
-  //if (!sweep_done && !in_sweep) {
-    //in_sweep = true;  // prevent recursion
-
-    //std::cout << "[ChamberSphere] Running parameter sweep..." << std::endl;
-
-    //std::vector<double> y_std = y;
-    //std::vector<double> dy_std = dy;
-
-    // If sweep_parameters is a *free function* taking ChamberSphere&:
-    //sweep_parameters(*this, alpha, y_std, dy_std);
-
-    //sweep_done = true;
-    //in_sweep   = false; // re-enable for other purposes if ever needed
-  //}
-  
   auto Pin = y[global_var_ids[0]];  
   auto Qin = y[global_var_ids[1]];  
   auto Pout = y[global_var_ids[2]];  
@@ -184,25 +163,15 @@ void ChamberSphere::update_gradient(
   auto radius0 = alpha[global_param_ids[1]];
   // These parameters should not be hardcoded
   double rho = 1000.0;
-  double W1 = 2e4;      
+  double W1 = 20e4;      
   double W2 = 20.0;          
   double eta = 5.0;
-  double sigma_max = 185e3;
-  double alpha_max = 30.0;
-  double alpha_min = -30.0;
-  double tsys = 0.170;
-  double tdias = 0.484;
-  double steepness = 0.005;
-  
-  //std::cout << "[DEBUG] globals_initialized before check = " 
-         //<< globals_initialized 
-         //<< " dradius_prev_global=" << dradius_prev_global
-         //<< " tau_prev_global=" << tau_prev_global << std::endl;
-          
-  if (!globals_initialized) {
-    std::cout << "[DEBUG] Reinitializing global state for " << this->get_name() << std::endl;
-    globals_initialized = true;
-   }
+  double sigma_max = 0.0;
+  double alpha_max = 0.0;
+  double alpha_min = 0.0;
+  double tsys = 0.0;
+  double tdias = 0.0;
+  double steepness = 1e-9;
 
   // Compute act and act_plus
   const auto T_cardiac = 1.6119; // This should not be hardcoded
@@ -235,77 +204,5 @@ void ChamberSphere::update_gradient(
   residual(global_eqn_ids[0]) = pow(M_PI, -2.3333333333333335)*pow(volume, -5.333333333333333)*(-0.82548181222365669*pow(M_PI, 1.6666666666666667)*Pout*pow(radius0, 2)*pow(volume, 6.0) + pow(M_PI, 2.3333333333333335)*ddradius*pow(radius0, 4)*rho*thick0*pow(volume, 5.333333333333333) + 0.90856029641606983*pow(M_PI, 0.66666666666666663)*thick0*(1.1006424162982089*pow(M_PI, 0.66666666666666663)*dvolume*eta*pow(volume, 2.0)*(-6.3209876543209873*pow(M_PI, 4.0)*pow(radius0, 12) + pow(volume, 4.0))*pow(1.0/volume, 0.66666666666666663) + pow(M_PI, 1.3333333333333335)*pow(radius0, 2)*tau*pow(volume, 5.6666666666666661) + pow(M_PI, 0.66666666666666674)*pow(volume, 3.6666666666666665)*(-7.1111111111111107*pow(M_PI, 2.0)*pow(radius0, 6) + 4*pow(volume, 2.0))*(pow(M_PI, 0.66666666666666663)*W1*pow(radius0, 2) + 0.82548181222365669*W2*pow(volume, 0.66666666666666663))))/pow(radius0, 4);
 
 }
-
-// 
-// double ChamberSphere::compute_objective(
-//     double thick0_val,
-//     double radius0_val,
-//     Eigen::VectorXd& alpha,
-//     const std::vector<double>& y,
-//     const std::vector<double>& dy)
-// {
-//     // indices of the parameters
-//     int idx_thick0  = global_param_ids[0];
-//     int idx_radius0 = global_param_ids[1];
-
-//     // Save original parameter values
-//     double thick0_old  = alpha[idx_thick0];
-//     double radius0_old = alpha[idx_radius0];
-
-//     // Inject candidate values
-//     alpha[idx_thick0]  = thick0_val;
-//     alpha[idx_radius0] = radius0_val;
-
-//     // --- Construct containers with correct sizes ---
-//     int n_eq   = global_eqn_ids.size();
-//     int n_vars = y.size();  // number of dynamic variables
-
-//     Eigen::SparseMatrix<double> J(n_eq, n_vars);
-//     Eigen::VectorXd R(n_eq);
-
-//     // Evaluate model
-//     update_gradient(J, R, alpha,
-//                     const_cast<std::vector<double>&>(y),
-//                     const_cast<std::vector<double>&>(dy));
-
-//     // Restore original parameter values
-//     alpha[idx_thick0]  = thick0_old;
-//     alpha[idx_radius0] = radius0_old;
-
-//     return R.squaredNorm();
-// }
-
-// void ChamberSphere::sweep_parameters(ChamberSphere& model,
-//                       Eigen::VectorXd& alpha,
-//                       const std::vector<double>& y,
-//                       const std::vector<double>& dy)
-// {
-//     double thick0_0 = alpha[model.global_param_ids[0]];
-//     double radius0_0 = alpha[model.global_param_ids[1]];
-
-//     double tmin = 0.5 * thick0_0;
-//     double tmax = 2.0 * thick0_0;
-//     double rmin = 0.5 * radius0_0;
-//     double rmax = 2.0 * radius0_0;
-
-//     const int Nt = 40;
-//     const int Nr = 40;
-
-//     std::ofstream file("parameter_landscape.csv");
-//     file << "thick0,radius0,residual\n";
-
-//     for (int i = 0; i < Nt; i++) {
-//         double thick0 = tmin + (tmax - tmin) * i / (Nt - 1);
-
-//         for (int j = 0; j < Nr; j++) {
-//             double radius0 = rmin + (rmax - rmin) * j / (Nr - 1);
-
-//             double res = model.compute_objective(thick0, radius0,
-//                                                  alpha, y, dy);
-
-//             file << thick0 << "," << radius0 << "," << res << "\n";
-//         }
-//     }
-// }
 
 

@@ -245,20 +245,6 @@ class ChamberSphere : public Block {
     double tau_prev_global;  // stores the previous tau value
     bool globals_initialized;     // marks first-time initialization
 
-  
-  double compute_objective(double thick0_val,
-                           double radius0_val,
-                           Eigen::VectorXd& alpha,
-                           const std::vector<double>& y,
-                           const std::vector<double>& dy);
-
-  void sweep_parameters(ChamberSphere& model,
-                      Eigen::VectorXd& alpha,
-                      const std::vector<double>& y,
-                      const std::vector<double>& dy);
-  
-
-
   /**
    * @brief Number of triplets of element
    *
