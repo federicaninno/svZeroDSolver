@@ -1,0 +1,57 @@
+variables:
+  - Pin
+  - Qin
+  - Pout
+  - Qout
+  - tau
+  - volume
+
+derivatives:
+  - dPin_dt
+  - dQin_dt
+  - dPout_dt
+  - dQout_dt
+  - dtau_dt
+  - dvolume_dt
+
+constants:
+  - rho
+  - radius0
+  - phi0
+  - W1
+  - W2
+  - eta
+  - act
+  - act_plus
+  - sigma_max
+  - ddlam_dt
+
+time_dependent:
+  - act
+  - act_plus
+
+helper_functions: |
+  def stretch(volume):
+    V0 = ((4.0 / 3.0) * pi * radius0 ** 3)
+    return (volume/V0) ** (1.0/3.0)
+
+  def CG(volume):
+      lam = stretch(volume)
+      return lam ** 2
+
+  def dCG(volume, dvolume_dt):
+      V0 = ((4.0 / 3.0) * pi * radius0 ** 3)
+      lam = stretch(volume)
+      dlam_dt = (1.0 / 3.0) * (volume/V0) ** (-2.0/3.0) * (dvolume_dt/V0)
+      return 2 * lam * dlam_dt
+
+  def stress(volume, dvolume_dt):
+      cg = CG(volume)
+      dcg = dCG(volume, dvolume_dt)
+      return tau + 4 * (1 - cg ** -3) * (W1 + cg * W2) + 2 * eta * dcg * (1 - 2 * cg ** -6)
+
+residuals:
+  - rho * (phi0 * radius0**2) * ddlam_dt + phi0 * stretch(volume) * stress(volume, dvolume_dt) - Pout * CG(volume)
+  - dtau_dt + act * tau - sigma_max * act_plus
+  - Qin - Qout - dvolume_dt
+  - Pin - Pout
