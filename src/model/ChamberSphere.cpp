@@ -12,32 +12,24 @@ void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
 
 void ChamberSphere::update_constant(SparseSystem& system,
                                     std::vector<double>& parameters) {
-  const double rho = parameters[global_param_ids[ParamId::rho]];
+    const double eta = parameters[global_param_ids[ParamId::eta]];
   const double thick0 = parameters[global_param_ids[ParamId::thick0]];
-
-  // balance of linear momentum
-  system.E.coeffRef(global_eqn_ids[0], global_var_ids[5]) = rho * thick0;
-
-  // spherical stress
+  const double rho = parameters[global_param_ids[ParamId::rho]];
+  const double radius0 = parameters[global_param_ids[ParamId::radius0]];
+  system.E.coeffRef(global_eqn_ids[0], global_var_ids[5]) = rho*thick0;
+  system.E.coeffRef(global_eqn_ids[1], global_var_ids[4]) = 6*eta/radius0;
+  system.E.coeffRef(global_eqn_ids[2], global_var_ids[8]) = -1;
+  system.E.coeffRef(global_eqn_ids[3], global_var_ids[7]) = 1;
+  system.E.coeffRef(global_eqn_ids[4], global_var_ids[4]) = 1;
+  system.E.coeffRef(global_eqn_ids[5], global_var_ids[8]) = -1;
+  system.F.coeffRef(global_eqn_ids[0], global_var_ids[2]) = -1;
+  system.F.coeffRef(global_eqn_ids[0], global_var_ids[6]) = thick0/radius0;
   system.F.coeffRef(global_eqn_ids[1], global_var_ids[6]) = -1;
   system.F.coeffRef(global_eqn_ids[1], global_var_ids[7]) = 1;
-
-  // volume change
-  system.E.coeffRef(global_eqn_ids[2], global_var_ids[8]) = -1;
-
-  // active stress
-  system.E.coeffRef(global_eqn_ids[3], global_var_ids[7]) = 1;
-
-  // acceleration
-  system.E.coeffRef(global_eqn_ids[4], global_var_ids[4]) = 1;
+  system.F.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*pow(radius0, 2);
   system.F.coeffRef(global_eqn_ids[4], global_var_ids[5]) = -1;
-
-  // conservation of mass
   system.F.coeffRef(global_eqn_ids[5], global_var_ids[1]) = 1;
   system.F.coeffRef(global_eqn_ids[5], global_var_ids[3]) = -1;
-  system.E.coeffRef(global_eqn_ids[5], global_var_ids[8]) = -1;
-
-  // pressure equality
   system.F.coeffRef(global_eqn_ids[6], global_var_ids[0]) = 1;
   system.F.coeffRef(global_eqn_ids[6], global_var_ids[2]) = -1;
 }
@@ -53,55 +45,28 @@ void ChamberSphere::update_solution(
     SparseSystem& system, std::vector<double>& parameters,
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& y,
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& dy) {
-  const double W1 = parameters[global_param_ids[ParamId::W1]];
-  const double W2 = parameters[global_param_ids[ParamId::W2]];
+    
   const double eta = parameters[global_param_ids[ParamId::eta]];
-  const double thick0 = parameters[global_param_ids[ParamId::thick0]];
-  const double sigma_max = parameters[global_param_ids[ParamId::sigma_max]];
-
+  const double W2 = parameters[global_param_ids[ParamId::W2]];
   const double radius0 = parameters[global_param_ids[ParamId::radius0]];
-  const double velo = y[global_var_ids[5]];
+  const double W1 = parameters[global_param_ids[ParamId::W1]];
+  const double thick0 = parameters[global_param_ids[ParamId::thick0]];
+  const double dradius_dt = dy[global_var_ids[4]];
   const double Pout = y[global_var_ids[2]];
   const double stress = y[global_var_ids[6]];
-  const double dradius_dt = dy[global_var_ids[4]];
+  const double velo = y[global_var_ids[5]];
   const double radius = y[global_var_ids[4]];
-
-  // balance of momentum
-  system.C.coeffRef(global_eqn_ids[0]) =
-      (radius + radius0) * (-Pout * (radius + radius0) + stress * thick0) /
-      pow(radius0, 2);
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) =
-      -pow(radius + radius0, 2) / pow(radius0, 2);
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) =
-      (-2 * Pout * (radius + radius0) + stress * thick0) / pow(radius0, 2);
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) =
-      thick0 * (radius + radius0) / pow(radius0, 2);
-
-  // spherical stress
-  system.C.coeffRef(global_eqn_ids[1]) =
-      2 *
-      (dradius_dt * eta * (2 * pow(radius0, 12) + pow(radius + radius0, 12)) +
-       2 * pow(radius + radius0, 5) *
-           (-pow(radius0, 6) + pow(radius + radius0, 6)) *
-           (W1 * pow(radius0, 2) + W2 * pow(radius + radius0, 2))) /
-      (pow(radius0, 2) * pow(radius + radius0, 11));
-  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[4]) =
-      24 * W1 * pow(radius0, 6) / pow(radius + radius0, 7) +
-      8 * W2 * radius / pow(radius0, 2) +
-      16 * W2 * pow(radius0, 4) / pow(radius + radius0, 5) + 8 * W2 / radius0 -
-      44 * dradius_dt * eta * pow(radius0, 10) / pow(radius + radius0, 12) +
-      2 * dradius_dt * eta / pow(radius0, 2);
-  system.dC_dydot.coeffRef(global_eqn_ids[1], global_var_ids[4]) =
-      2 * eta * (2 * pow(radius0, 12) + pow(radius + radius0, 12)) /
-      (pow(radius0, 2) * pow(radius + radius0, 11));
-
-  // volume change
-  system.C.coeffRef(global_eqn_ids[2]) =
-      4 * M_PI * velo * pow(radius + radius0, 2);
-  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[4]) =
-      8 * M_PI * velo * (radius + radius0);
-  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[5]) =
-      4 * M_PI * pow(radius + radius0, 2);
+  const double sigma_max = parameters[global_param_ids[ParamId::sigma_max]];
+  system.C.coeffRef(global_eqn_ids[0]) = radius*(-Pout*radius - 2*Pout*radius0 + stress*thick0)/pow(radius0, 2);
+  system.C.coeffRef(global_eqn_ids[1]) = (2.0*W1*pow(radius0, 2)*pow(radius + radius0, 5)*(-pow(radius0, 6) + pow(radius + radius0, 6))*exp(W2*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) - 6*dradius_dt*eta*radius0*pow(radius + radius0, 11) + 2*dradius_dt*eta*(2*pow(radius0, 12) + pow(radius + radius0, 12)))/(pow(radius0, 2)*pow(radius + radius0, 11));
+  system.C.coeffRef(global_eqn_ids[2]) = 4*M_PI*radius*velo*(radius + 2*radius0);
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) = -radius*(radius + 2*radius0)/pow(radius0, 2);
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) = (-2*Pout*radius - 2*Pout*radius0 + stress*thick0)/pow(radius0, 2);
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) = radius*thick0/pow(radius0, 2);
+  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[4]) = (22.0*W1*pow(radius0, 2)*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*exp(W2*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) + 66*dradius_dt*eta*radius0*pow(radius + radius0, 11) - 22*dradius_dt*eta*(2*pow(radius0, 12) + pow(radius + radius0, 12)) + (radius + radius0)*(2.0*W1*W2*(pow(radius0, 6) - pow(radius + radius0, 6))*(4.0*pow(radius0, 6) - 12.0*pow(radius0, 2)*pow(radius + radius0, 4) + 8.0*pow(radius + radius0, 6) + 12.0*pow(radius + radius0, 4)*(pow(radius0, 2) - pow(radius + radius0, 2)))*exp(W2*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) + pow(radius + radius0, 4)*(12.0*W1*pow(radius0, 2)*pow(radius + radius0, 6)*exp(W2*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) - 10.0*W1*pow(radius0, 2)*(pow(radius0, 6) - pow(radius + radius0, 6))*exp(W2*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) - 66*dradius_dt*eta*radius0*pow(radius + radius0, 6) + 24*dradius_dt*eta*pow(radius + radius0, 7))))/(pow(radius0, 2)*pow(radius + radius0, 12));
+  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[4]) = 8*M_PI*velo*(radius + radius0);
+  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*radius*(radius + 2*radius0);
+  system.dC_dydot.coeffRef(global_eqn_ids[1], global_var_ids[4]) = 2*eta*radius/pow(radius0, 2) + 4*eta*pow(radius0, 10)/pow(radius + radius0, 11) - 4*eta/radius0;
 
   // active stress
   system.C.coeffRef(global_eqn_ids[3]) = -act_plus * sigma_max;
