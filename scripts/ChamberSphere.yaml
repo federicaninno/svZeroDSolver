@@ -24,8 +24,12 @@ constants:
   - rho
   - thick0
   - radius0
-  - W1
-  - W2
+  - a
+  - b
+  - a4f
+  - b4f
+  - a4s
+  - b4s
   - eta
   - act
   - act_plus
@@ -41,10 +45,25 @@ helper_functions: |
 
   def dCG(radius, dradius_dt):
       return 2 * (1 + (radius / radius0)) * (1 / radius0) * dradius_dt
+  
+  def macaulay(x):
+      return Max(x, 0.0)
+
+  def J1(radius):
+      C = CG(radius)
+      return (1.0 / (C**2)) + 2.0 * C
+
+  def dWe_dJ1(radius):
+      return 0.5 * a * exp(b * (J1(radius) - 3.0))
+
+  def dWe_dJ4(radius):
+      C = CG(radius)
+      m = macaulay(C - 1.0)
+      return (a4f * m * exp(b4f * m**2)+ a4s * m * exp(b4s * m**2))
 
 residuals:
   - rho * thick0 * dvelo_dt + (thick0 / radius0) * (1 + (radius / radius0)) * stress - Pout * CG(radius)
-  - -stress + tau + 4 * (1 - CG(radius) ** (-3)) * (0.5 * W1 * exp(W2 * (((1.0 / CG(radius)**2) + 2.0 * CG(radius)) - 3.0))) + eta * dCG(radius, dradius_dt) * (1 + 2 * CG(radius) ** (-6))
+  - -stress + tau + 4.0 * (1.0 - CG(radius) ** (-3)) * dWe_dJ1(radius) + 2.0 * dWe_dJ4(radius) + eta * dCG(radius, dradius_dt) * (1.0 + 2.0 * CG(radius) ** (-6))
   - 4 * pi * radius0 ** 2 * CG(radius) * velo - dvolume_dt
   - dtau_dt + act * tau - sigma_max * act_plus
   - dradius_dt - velo

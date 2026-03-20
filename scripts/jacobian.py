@@ -1,4 +1,4 @@
-from sympy import symbols, Matrix, simplify, pi, Abs, exp
+from sympy import symbols, Matrix, simplify, pi, Abs, exp, Max
 from sympy.printing import ccode
 import re
 import pdb
@@ -17,6 +17,7 @@ def load_model(filepath):
     context['pi'] = pi
     context['abs'] = Abs
     context['exp'] = exp
+    context['Max'] = Max
 
     if 'helper_functions' in data:
         exec(data['helper_functions'], context, context)
