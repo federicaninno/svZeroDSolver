@@ -140,19 +140,20 @@ class ChamberSphere : public Block {
     rho = 0,
     thick0 = 1,
     radius0 = 2,
-    a = 3,
-    b = 4,
-    a4f = 5,
-    b4f = 6,
-    a4s = 7,
-    b4s = 8,
-    eta = 9,
-    sigma_max = 10,
-    alpha_max = 11,
-    alpha_min = 12,
-    tsys = 13,
-    tdias = 14,
-    steepness = 15
+    epsilon0 = 3, // not an input parameter but is derived from radius0 and the initial volume
+    a = 4,
+    b = 5,
+    a4f = 6,
+    b4f = 7,
+    a4s = 8,
+    b4s = 9,
+    eta = 10,
+    sigma_max = 11,
+    alpha_max = 12,
+    alpha_min = 13,
+    tsys = 14,
+    tdias = 15,
+    steepness = 16
   };
 
   /**
@@ -166,6 +167,7 @@ class ChamberSphere : public Block {
               {{"rho", InputParameter()},
                {"thick0", InputParameter()},
                {"radius0", InputParameter()},
+               {"epsilon0", InputParameter()}, // not an input parameter but is derived from radius0 and the initial volume
                {"a", InputParameter()},
                {"b", InputParameter()},
                {"a4f", InputParameter()},

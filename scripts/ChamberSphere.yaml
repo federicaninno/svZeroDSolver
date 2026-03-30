@@ -24,6 +24,7 @@ constants:
   - rho
   - thick0
   - radius0
+  - epsilon0
   - a
   - b
   - a4f
@@ -64,7 +65,7 @@ helper_functions: |
 residuals:
   - rho * thick0 * dvelo_dt + (thick0 / radius0) * (1 + (radius / radius0)) * stress - Pout * CG(radius)
   - -stress + tau + 4.0 * (1.0 - CG(radius) ** (-3)) * dWe_dJ1(radius) + 2.0 * dWe_dJ4(radius) + eta * dCG(radius, dradius_dt) * (1.0 + 2.0 * CG(radius) ** (-6))
-  - 4 * pi * radius0 ** 2 * CG(radius) * velo - dvolume_dt
+  - epsilon0 * 4 * pi * radius0 ** 2 * CG(radius) * velo - dvolume_dt
   - dtau_dt + act * tau - sigma_max * act_plus
   - dradius_dt - velo
   - Qin - Qout - dvolume_dt

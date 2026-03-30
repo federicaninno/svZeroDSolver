@@ -15,6 +15,7 @@ void ChamberSphere::update_constant(SparseSystem& system,
   const double thick0 = parameters[global_param_ids[ParamId::thick0]];
   const double eta = parameters[global_param_ids[ParamId::eta]];
   const double radius0 = parameters[global_param_ids[ParamId::radius0]];
+  const double epsilon0 = parameters[global_param_ids[ParamId::epsilon0]];
   const double rho = parameters[global_param_ids[ParamId::rho]];
   system.E.coeffRef(global_eqn_ids[0], global_var_ids[5]) = rho*thick0;
   system.E.coeffRef(global_eqn_ids[1], global_var_ids[4]) = 6.0*eta/radius0;
@@ -26,7 +27,7 @@ void ChamberSphere::update_constant(SparseSystem& system,
   system.F.coeffRef(global_eqn_ids[0], global_var_ids[6]) = thick0/radius0;
   system.F.coeffRef(global_eqn_ids[1], global_var_ids[6]) = -1;
   system.F.coeffRef(global_eqn_ids[1], global_var_ids[7]) = 1;
-  system.F.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*pow(radius0, 2);
+  system.F.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*epsilon0*pow(radius0, 2);
   system.F.coeffRef(global_eqn_ids[4], global_var_ids[5]) = -1;
   system.F.coeffRef(global_eqn_ids[5], global_var_ids[1]) = 1;
   system.F.coeffRef(global_eqn_ids[5], global_var_ids[3]) = -1;
@@ -50,6 +51,7 @@ void ChamberSphere::update_solution(
   const double a4s = parameters[global_param_ids[ParamId::a4s]];
   const double b4s = parameters[global_param_ids[ParamId::b4s]];
   const double eta = parameters[global_param_ids[ParamId::eta]];
+  const double epsilon0 = parameters[global_param_ids[ParamId::epsilon0]];
   const double b4f = parameters[global_param_ids[ParamId::b4f]];
   const double a = parameters[global_param_ids[ParamId::a]];
   const double thick0 = parameters[global_param_ids[ParamId::thick0]];
@@ -62,7 +64,7 @@ void ChamberSphere::update_solution(
   const double stress = y[global_var_ids[6]];
   system.C.coeffRef(global_eqn_ids[0]) = radius*(-Pout*radius - 2*Pout*radius0 + stress*thick0)/pow(radius0, 2);
   system.C.coeffRef(global_eqn_ids[1]) = (2.0*a*pow(radius0, 2)*pow(radius + radius0, 5)*(-pow(radius0, 6) + pow(radius + radius0, 6))*exp(b*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) - 6.0*dradius_dt*eta*radius0*pow(radius + radius0, 11) + 2*dradius_dt*eta*(2.0*pow(radius0, 12) + 1.0*pow(radius + radius0, 12)) + 2.0*pow(radius0, 2)*pow(radius + radius0, 11)*(a4f*exp(b4f*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)) + a4s*exp(b4s*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)))*fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)))/(pow(radius0, 2)*pow(radius + radius0, 11));
-  system.C.coeffRef(global_eqn_ids[2]) = 4*M_PI*radius*velo*(radius + 2*radius0);
+  system.C.coeffRef(global_eqn_ids[2]) = 4*M_PI*epsilon0*radius*velo*(radius + 2*radius0);
   system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) = -radius*(radius + 2*radius0)/pow(radius0, 2);
   system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) = (-2*Pout*radius - 2*Pout*radius0 + stress*thick0)/pow(radius0, 2);
   system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) = radius*thick0/pow(radius0, 2);
@@ -83,8 +85,8 @@ void ChamberSphere::update_solution(
 : (
    1
 ))))*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2))))/(pow(radius0, 2)*pow(radius + radius0, 12));
-  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[4]) = 8*M_PI*velo*(radius + radius0);
-  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*radius*(radius + 2*radius0);
+  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[4]) = 8*M_PI*epsilon0*velo*(radius + radius0);
+  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*epsilon0*radius*(radius + 2*radius0);
   system.dC_dydot.coeffRef(global_eqn_ids[1], global_var_ids[4]) = 2.0*eta*radius/pow(radius0, 2) + 4.0*eta*pow(radius0, 10)/pow(radius + radius0, 11) - 4.0*eta/radius0;
 
   // active stress
