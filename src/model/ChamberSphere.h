@@ -140,7 +140,7 @@ class ChamberSphere : public Block {
     rho = 0,
     thick0 = 1,
     radius0 = 2,
-    epsilon0 = 3, // not an input parameter but is derived from radius0 and the initial volume
+    n = 3, // not an input parameter but is derived from radius0 and the initial volume
     a = 4,
     b = 5,
     a4f = 6,
@@ -167,7 +167,7 @@ class ChamberSphere : public Block {
               {{"rho", InputParameter()},
                {"thick0", InputParameter()},
                {"radius0", InputParameter()},
-               {"epsilon0", InputParameter()}, // not an input parameter but is derived from radius0 and the initial volume
+               {"n", InputParameter()}, // not an input parameter but is derived from radius0 and the initial volume
                {"a", InputParameter()},
                {"b", InputParameter()},
                {"a4f", InputParameter()},
