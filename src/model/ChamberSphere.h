@@ -140,15 +140,16 @@ class ChamberSphere : public Block {
     rho = 0,
     thick0 = 1,
     radius0 = 2,
-    W1 = 3,
-    W2 = 4,
-    eta = 5,
-    sigma_max = 6,
-    alpha_max = 7,
-    alpha_min = 8,
-    tsys = 9,
-    tdias = 10,
-    steepness = 11
+    n = 3,
+    W1 = 4,
+    W2 = 5,
+    eta = 6,
+    sigma_max = 7,
+    alpha_max = 8,
+    alpha_min = 9,
+    tsys = 10,
+    tdias = 11,
+    steepness = 12
   };
 
   /**
@@ -162,6 +163,7 @@ class ChamberSphere : public Block {
               {{"rho", InputParameter()},
                {"thick0", InputParameter()},
                {"radius0", InputParameter()},
+               {"n", InputParameter()},
                {"W1", InputParameter()},
                {"W2", InputParameter()},
                {"eta", InputParameter()},
