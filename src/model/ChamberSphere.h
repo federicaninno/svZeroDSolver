@@ -137,23 +137,22 @@ class ChamberSphere : public Block {
    *
    */
   enum ParamId {
-    rho = 0,
-    thick0 = 1,
-    radius0 = 2,
-    n = 3, // not an input parameter but is derived from radius0 and the initial volume
-    a = 4,
-    b = 5,
-    a4f = 6,
-    b4f = 7,
-    a4s = 8,
-    b4s = 9,
-    eta = 10,
-    sigma_max = 11,
-    alpha_max = 12,
-    alpha_min = 13,
-    tsys = 14,
-    tdias = 15,
-    steepness = 16
+    gamma = 0,
+    n = 1,
+    volume0 = 2,
+    a = 3,
+    b = 4,
+    a4f = 5,
+    b4f = 6,
+    a4s = 7,
+    b4s = 8,
+    eta = 9,
+    sigma_max = 10,
+    alpha_max = 11,
+    alpha_min = 12,
+    tsys = 13,
+    tdias = 14,
+    steepness = 15
   };
 
   /**
@@ -164,10 +163,9 @@ class ChamberSphere : public Block {
    */
   ChamberSphere(int id, Model* model)
       : Block(id, model, BlockType::chamber_sphere, BlockClass::vessel,
-              {{"rho", InputParameter()},
-               {"thick0", InputParameter()},
-               {"radius0", InputParameter()},
-               {"n", InputParameter()}, // not an input parameter but is derived from radius0 and the initial volume
+              {{"gamma", InputParameter()},
+               {"n", InputParameter()},
+               {"volume0", InputParameter()},
                {"a", InputParameter()},
                {"b", InputParameter()},
                {"a4f", InputParameter()},

@@ -6,40 +6,34 @@
 #include "Model.h"
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
-  Block::setup_dofs_(dofhandler, 7,
-                     {"radius", "velo", "stress", "tau", "volume"});
+  Block::setup_dofs_(dofhandler, 5,
+                     {"stress", "tau", "volume"});
 }
 
 void ChamberSphere::update_constant(SparseSystem& system,
                                     std::vector<double>& parameters) {
-  const double rho = parameters[global_param_ids[ParamId::rho]];
-  const double eta = parameters[global_param_ids[ParamId::eta]];
-  const double thick0 = parameters[global_param_ids[ParamId::thick0]];
-  const double radius0 = parameters[global_param_ids[ParamId::radius0]];
+  const double volume0 = parameters[global_param_ids[ParamId::volume0]];
   const double n = parameters[global_param_ids[ParamId::n]];
-  system.E.coeffRef(global_eqn_ids[0], global_var_ids[5]) = rho*thick0;
-  system.E.coeffRef(global_eqn_ids[1], global_var_ids[4]) = 6.0*eta/radius0;
-  system.E.coeffRef(global_eqn_ids[2], global_var_ids[8]) = -1;
-  system.E.coeffRef(global_eqn_ids[3], global_var_ids[7]) = 1;
-  system.E.coeffRef(global_eqn_ids[4], global_var_ids[4]) = 1;
-  system.E.coeffRef(global_eqn_ids[5], global_var_ids[8]) = -1;
+  const double eta = parameters[global_param_ids[ParamId::eta]];
+  const double gamma = parameters[global_param_ids[ParamId::gamma]];
+  system.E.coeffRef(global_eqn_ids[1], global_var_ids[6]) = 2.0*eta/(n*volume0);
+  system.E.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 1;
+  system.E.coeffRef(global_eqn_ids[3], global_var_ids[6]) = -1;
   system.F.coeffRef(global_eqn_ids[0], global_var_ids[2]) = -1;
-  system.F.coeffRef(global_eqn_ids[0], global_var_ids[6]) = thick0/radius0;
-  system.F.coeffRef(global_eqn_ids[1], global_var_ids[6]) = -1;
-  system.F.coeffRef(global_eqn_ids[1], global_var_ids[7]) = 1;
-  system.F.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*n*pow(radius0, 3*n - 1);
-  system.F.coeffRef(global_eqn_ids[4], global_var_ids[5]) = -1;
-  system.F.coeffRef(global_eqn_ids[5], global_var_ids[1]) = 1;
-  system.F.coeffRef(global_eqn_ids[5], global_var_ids[3]) = -1;
-  system.F.coeffRef(global_eqn_ids[6], global_var_ids[0]) = 1;
-  system.F.coeffRef(global_eqn_ids[6], global_var_ids[2]) = -1;
+  system.F.coeffRef(global_eqn_ids[0], global_var_ids[4]) = gamma;
+  system.F.coeffRef(global_eqn_ids[1], global_var_ids[4]) = -1;
+  system.F.coeffRef(global_eqn_ids[1], global_var_ids[5]) = 1;
+  system.F.coeffRef(global_eqn_ids[3], global_var_ids[1]) = 1;
+  system.F.coeffRef(global_eqn_ids[3], global_var_ids[3]) = -1;
+  system.F.coeffRef(global_eqn_ids[4], global_var_ids[0]) = 1;
+  system.F.coeffRef(global_eqn_ids[4], global_var_ids[2]) = -1;
 }
 
 void ChamberSphere::update_time(SparseSystem& system,
                                 std::vector<double>& parameters) {
   // active stress
   get_elastance_values(parameters);
-  system.F.coeffRef(global_eqn_ids[3], global_var_ids[7]) = act;
+  system.F.coeffRef(global_eqn_ids[2], global_var_ids[5]) = act;
 }
 
 void ChamberSphere::update_solution(
@@ -47,52 +41,63 @@ void ChamberSphere::update_solution(
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& y,
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& dy) {
     
-   const double b = parameters[global_param_ids[ParamId::b]];
-  const double a = parameters[global_param_ids[ParamId::a]];
-  const double a4f = parameters[global_param_ids[ParamId::a4f]];
-  const double thick0 = parameters[global_param_ids[ParamId::thick0]];
-  const double eta = parameters[global_param_ids[ParamId::eta]];
-  const double b4f = parameters[global_param_ids[ParamId::b4f]];
-  const double radius0 = parameters[global_param_ids[ParamId::radius0]];
-  const double a4s = parameters[global_param_ids[ParamId::a4s]];
+  const double b = parameters[global_param_ids[ParamId::b]];
+  const double gamma = parameters[global_param_ids[ParamId::gamma]];
   const double b4s = parameters[global_param_ids[ParamId::b4s]];
+  const double a4f = parameters[global_param_ids[ParamId::a4f]];
+  const double a4s = parameters[global_param_ids[ParamId::a4s]];
+  const double eta = parameters[global_param_ids[ParamId::eta]];
+  const double a = parameters[global_param_ids[ParamId::a]];
+  const double volume0 = parameters[global_param_ids[ParamId::volume0]];
   const double n = parameters[global_param_ids[ParamId::n]];
-  const double velo = y[global_var_ids[5]];
+  const double b4f = parameters[global_param_ids[ParamId::b4f]];
+  const double stress = y[global_var_ids[4]];
+  const double volume = y[global_var_ids[6]];
   const double Pout = y[global_var_ids[2]];
-  const double dradius_dt = dy[global_var_ids[4]];
-  const double stress = y[global_var_ids[6]];
-  const double radius = y[global_var_ids[4]];
-  const double sigma_max = parameters[global_param_ids[ParamId::sigma_max]];
-  system.C.coeffRef(global_eqn_ids[0]) = radius*(-Pout*radius - 2*Pout*radius0 + stress*thick0)/pow(radius0, 2);
-  system.C.coeffRef(global_eqn_ids[1]) = (2.0*a*pow(radius0, 2)*pow(radius + radius0, 5)*(-pow(radius0, 6) + pow(radius + radius0, 6))*exp(b*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) - 6.0*dradius_dt*eta*radius0*pow(radius + radius0, 11) + 2*dradius_dt*eta*(2.0*pow(radius0, 12) + 1.0*pow(radius + radius0, 12)) + 2.0*pow(radius0, 2)*pow(radius + radius0, 11)*(a4f*exp(b4f*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)) + a4s*exp(b4s*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)))*fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)))/(pow(radius0, 2)*pow(radius + radius0, 11));
-  system.C.coeffRef(global_eqn_ids[2]) = 4*M_PI*n*pow(radius0, 3*n - 1)*velo*(pow(pow(radius + radius0, 2)/pow(radius0, 2), (3.0/2.0)*n - 1.0/2.0) - 1);
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) = -radius*(radius + 2*radius0)/pow(radius0, 2);
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) = (-2*Pout*radius - 2*Pout*radius0 + stress*thick0)/pow(radius0, 2);
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) = radius*thick0/pow(radius0, 2);
-  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[4]) = (22.0*a*pow(radius0, 2)*pow(radius + radius0, 5)*(pow(radius0, 6) - pow(radius + radius0, 6))*exp(b*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) + 66.0*dradius_dt*eta*radius0*pow(radius + radius0, 11) - 22*dradius_dt*eta*(2.0*pow(radius0, 12) + 1.0*pow(radius + radius0, 12)) - 22.0*pow(radius0, 2)*pow(radius + radius0, 11)*(a4f*exp(b4f*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)) + a4s*exp(b4s*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)))*fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)) + (radius + radius0)*(2.0*a*b*(pow(radius0, 6) - pow(radius + radius0, 6))*(4.0*pow(radius0, 6) - 12.0*pow(radius0, 2)*pow(radius + radius0, 4) + 8.0*pow(radius + radius0, 6) + 12.0*pow(radius + radius0, 4)*(pow(radius0, 2) - pow(radius + radius0, 2)))*exp(b*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) + pow(radius + radius0, 4)*(12.0*a*pow(radius0, 2)*pow(radius + radius0, 6)*exp(b*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) - 10.0*a*pow(radius0, 2)*(pow(radius0, 6) - pow(radius + radius0, 6))*exp(b*(1.0*pow(radius0, 6) - 3.0*pow(radius0, 2)*pow(radius + radius0, 4) + 2.0*pow(radius + radius0, 6))/(pow(radius0, 2)*pow(radius + radius0, 4))) - 66.0*dradius_dt*eta*radius0*pow(radius + radius0, 6) + 24.0*dradius_dt*eta*pow(radius + radius0, 7) + 22.0*pow(radius0, 2)*pow(radius + radius0, 6)*(a4f*exp(b4f*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)) + a4s*exp(b4s*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)))*fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)) + 4.0*pow(radius + radius0, 8)*(a4f*exp(b4f*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)) + a4s*exp(b4s*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)))*(((radius*(radius + 2*radius0)/pow(radius0, 2) < 0) ? (
+  const double dvolume_dt = dy[global_var_ids[6]];
+  system.C.coeffRef(global_eqn_ids[0]) = -Pout*pow((volume + volume0)/volume0, (2.0/3.0)/n) + Pout + gamma*stress*pow((volume + volume0)/volume0, (1.0/3.0)/n) - gamma*stress;
+  system.C.coeffRef(global_eqn_ids[1]) = (1.0/3.0)*pow((volume + volume0)/volume0, -(17.0/3.0)/n)*(6.0*a*n*volume0*pow((volume + volume0)/volume0, (11.0/3.0)/n)*(pow((volume + volume0)/volume0, 2/n) - 1)*exp(b*pow((volume + volume0)/volume0, -(4.0/3.0)/n)*(pow((volume + volume0)/volume0, (4.0/3.0)/n)*(2.0*pow((volume + volume0)/volume0, (2.0/3.0)/n) - 3.0) + 1.0)) - 6.0*dvolume_dt*eta*pow((volume + volume0)/volume0, (17.0/3.0)/n) + 2*dvolume_dt*eta*pow((volume + volume0)/volume0, (1.0/3.0)*(7 - 3*n)/n)*(1.0*pow((volume + volume0)/volume0, 4/n) + 2.0) + 6.0*n*volume0*pow((volume + volume0)/volume0, (17.0/3.0)/n)*(a4f*exp(b4f*pow(fmax(0.0, pow((volume + volume0)/volume0, (2.0/3.0)/n) - 1.0), 2)) + a4s*exp(b4s*pow(fmax(0.0, pow((volume + volume0)/volume0, (2.0/3.0)/n) - 1.0), 2)))*fmax(0.0, pow((volume + volume0)/volume0, (2.0/3.0)/n) - 1.0))/(n*volume0);
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) = 1 - pow((volume + volume0)/volume0, (2.0/3.0)/n);
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) = gamma*(pow((volume + volume0)/volume0, (1.0/3.0)/n) - 1);
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) = (1.0/3.0)*pow((volume + volume0)/volume0, (1.0/3.0)/n)*(-2*Pout*pow((volume + volume0)/volume0, (1.0/3.0)/n) + gamma*stress)/(n*(volume + volume0));
+  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[6]) = pow(volume/volume0 + 1, -(17.0/3.0)/n)*(2.6666666666666665*a*b*n*volume0*pow(volume/volume0 + 1, (19.0/3.0)/n)*exp(b*(2.0*pow(volume/volume0 + 1, (2.0/3.0)/n) - 3.0 + 1.0*pow(volume/volume0 + 1, -(4.0/3.0)/n))) - 5.333333333333333*a*b*n*volume0*pow(volume/volume0 + 1, (13.0/3.0)/n)*exp(b*(2.0*pow(volume/volume0 + 1, (2.0/3.0)/n) - 3.0 + 1.0*pow(volume/volume0 + 1, -(4.0/3.0)/n))) + 2.6666666666666665*a*b*n*volume0*pow(volume/volume0 + 1, (7.0/3.0)/n)*exp(b*(2.0*pow(volume/volume0 + 1, (2.0/3.0)/n) - 3.0 + 1.0*pow(volume/volume0 + 1, -(4.0/3.0)/n))) + 4.0*a*n*volume0*pow(volume/volume0 + 1, (11.0/3.0)/n)*exp(b*(2.0*pow(volume/volume0 + 1, (2.0/3.0)/n) - 3.0 + 1.0*pow(volume/volume0 + 1, -(4.0/3.0)/n))) + 2.6666666666666665*a4f*b4f*n*volume0*pow(volume/volume0 + 1, (19.0/3.0)/n)*exp(b4f*pow(fmax(0.0, pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0), 2))*(((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 < 0) ? (
    0
 )
-: ((radius*(radius + 2*radius0)/pow(radius0, 2) == 0) ? (
+: ((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 == 0) ? (
    1.0/2.0
 )
 : (
    1
-)))) + 8.0*pow(radius + radius0, 8)*(a4f*b4f*exp(b4f*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)) + a4s*b4s*exp(b4s*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2)))*(((radius*(radius + 2*radius0)/pow(radius0, 2) < 0) ? (
+))))*pow(fmax(0.0, pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0), 2) + 1.3333333333333333*a4f*n*volume0*pow(volume/volume0 + 1, (19.0/3.0)/n)*exp(b4f*pow(fmax(0.0, pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0), 2))*(((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 < 0) ? (
    0
 )
-: ((radius*(radius + 2*radius0)/pow(radius0, 2) == 0) ? (
+: ((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 == 0) ? (
    1.0/2.0
 )
 : (
    1
-))))*pow(fmax(0.0, radius*(radius + 2*radius0)/pow(radius0, 2)), 2))))/(pow(radius0, 2)*pow(radius + radius0, 12));
-  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[4]) = 4*M_PI*n*pow(radius0, 3*n - 1)*velo*pow(pow(radius + radius0, 2)/pow(radius0, 2), (3.0/2.0)*n - 1.0/2.0)*(3*n - 1)/(radius + radius0);
-  system.dC_dy.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 4*M_PI*n*pow(radius0, 3*n - 1)*(pow(pow(radius + radius0, 2)/pow(radius0, 2), (3.0/2.0)*n - 1.0/2.0) - 1);
-  system.dC_dydot.coeffRef(global_eqn_ids[1], global_var_ids[4]) = 2.0*eta*radius/pow(radius0, 2) + 4.0*eta*pow(radius0, 10)/pow(radius + radius0, 11) - 4.0*eta/radius0;
+)))) + 2.6666666666666665*a4s*b4s*n*volume0*pow(volume/volume0 + 1, (19.0/3.0)/n)*exp(b4s*pow(fmax(0.0, pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0), 2))*(((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 < 0) ? (
+   0
+)
+: ((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 == 0) ? (
+   1.0/2.0
+)
+: (
+   1
+))))*pow(fmax(0.0, pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0), 2) + 1.3333333333333333*a4s*n*volume0*pow(volume/volume0 + 1, (19.0/3.0)/n)*exp(b4s*pow(fmax(0.0, pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0), 2))*(((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 < 0) ? (
+   0
+)
+: ((pow(volume/volume0 + 1, (2.0/3.0)/n) - 1.0 == 0) ? (
+   1.0/2.0
+)
+: (
+   1
+)))) - 1.3333333333333333*dvolume_dt*eta*n*pow(volume/volume0 + 1, -1 + (7.0/3.0)/n) - 0.66666666666666663*dvolume_dt*eta*n*pow(volume/volume0 + 1, -1 + (19.0/3.0)/n) - 4.4444444444444446*dvolume_dt*eta*pow(volume/volume0 + 1, -1 + (7.0/3.0)/n) + 0.44444444444444442*dvolume_dt*eta*pow(volume/volume0 + 1, -1 + (19.0/3.0)/n))/(pow(n, 2)*volume0*(volume + volume0));
+  system.dC_dydot.coeffRef(global_eqn_ids[1], global_var_ids[6]) = (1.0/3.0)*eta*pow((volume + volume0)/volume0, -(17.0/3.0)/n)*(-6.0*pow((volume + volume0)/volume0, (17.0/3.0)/n) + pow((volume + volume0)/volume0, (1.0/3.0)*(7 - 3*n)/n)*(2.0*pow((volume + volume0)/volume0, 4/n) + 4.0))/(n*volume0);
   
 
   // active stress
-  system.C.coeffRef(global_eqn_ids[3]) = -act_plus * sigma_max;
+  system.C.coeffRef(global_eqn_ids[2]) = -act_plus * sigma_max;
 }
 
 void ChamberSphere::get_elastance_values(std::vector<double>& parameters) {
