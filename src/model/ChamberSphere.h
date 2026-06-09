@@ -139,15 +139,14 @@ class ChamberSphere : public Block {
   enum ParamId {
     n = 0,
     volume0 = 1,
-    gamma_W1 = 2,
-    gamma_W2 = 3,
-    gamma_eta = 4,
-    gamma_sigma_max = 5,
-    alpha_max = 6,
-    alpha_min = 7,
-    tsys = 8,
-    tdias = 9,
-    steepness = 10
+    gamma_W1_over_n = 2,
+    gamma_sigma_max = 3,
+    prestress = 4,
+    alpha_max = 5,
+    alpha_min = 6,
+    tsys = 7,
+    tdias = 8,
+    steepness = 9
   };
 
   /**
@@ -160,10 +159,9 @@ class ChamberSphere : public Block {
       : Block(id, model, BlockType::chamber_sphere, BlockClass::vessel,
               {{"n", InputParameter()},
                {"volume0", InputParameter()},
-               {"gamma_W1", InputParameter()},
-               {"gamma_W2", InputParameter()},
-               {"gamma_eta", InputParameter()},
+               {"gamma_W1_over_n", InputParameter()},
                {"gamma_sigma_max", InputParameter()},
+               {"prestress", InputParameter()},
                {"alpha_max", InputParameter()},
                {"alpha_min", InputParameter()},
                {"tsys", InputParameter()},
