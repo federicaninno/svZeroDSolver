@@ -43,6 +43,7 @@ void ChamberSphere::update_solution(
   const double gamma_W1 = parameters[global_param_ids[ParamId::gamma_W1]];
   const double volume0 = parameters[global_param_ids[ParamId::volume0]];
   const double gamma_W2 = parameters[global_param_ids[ParamId::gamma_W2]];
+  const double gamma_sigma_max = parameters[global_param_ids[ParamId::gamma_sigma_max]];
   const double n = parameters[global_param_ids[ParamId::n]];
   const double volume = y[global_var_ids[6]];
   const double dvolume_dt = dy[global_var_ids[6]];
