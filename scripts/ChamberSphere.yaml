@@ -24,7 +24,8 @@ derivatives:
 constants:
   - n
   - volume0
-  - gamma_W1_over_n # k = gamma_W1/n  (identifiable effective stiffness; gamma_W1 = k*n)
+  - gamma_W1
+  - gamma_eta
   - gamma_sigma_max # gamma * sigma_max
   - act
   - act_plus
@@ -57,7 +58,7 @@ helper_functions: |
 
 residuals:
   - stretch(volume) * stress - Pout * CG(volume)
-  - -stress + tau + 4 * (1 - CG(volume) ** (-3)) * gamma_W1_over_n * n + prestress
+  - -stress + tau + 4 * gamma_W1 * (1 - CG(volume) ** (-3)) + prestress + gamma_eta * dCG(volume, dvolume_dt) * (1 + 2 * CG(volume) ** (-6))
   - dtau_dt + act * tau - gamma_sigma_max * act_plus
   - Qin - Qout - dvolume_dt
   - Pin - Pout
