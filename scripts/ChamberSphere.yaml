@@ -22,10 +22,8 @@ derivatives:
 #   stress  here represents  gamma * stress
 #   tau     here represents  gamma * tau
 constants:
-  - n
   - volume0
   - gamma_W1
-  - gamma_eta
   - gamma_sigma_max # gamma * sigma_max
   - act
   - act_plus
@@ -41,24 +39,15 @@ helper_functions: |
 
   def stretch(volume):
       V_val = V(volume)
-      return (V_val / volume0) ** (1 / (3 * n))
+      return (V_val / volume0) ** (1 / 3)
 
   def CG(volume):
       stretch_val = stretch(volume)
       return (stretch_val) ** 2
 
-  def dstretch_dt(volume, dvolume_dt):
-      V_val = V(volume)
-      return (1 / (3 * n)) * (V_val / volume0) ** ((1 / (3 * n)) - 1) * (1 / volume0) * dvolume_dt
-
-  def dCG(volume, dvolume_dt):
-      stretch_val = stretch(volume)
-      dstretch = dstretch_dt(volume, dvolume_dt)
-      return 2 * stretch_val * dstretch
-
 residuals:
   - stretch(volume) * stress - Pout * CG(volume)
-  - -stress + tau + 4 * gamma_W1 * (1 - CG(volume) ** (-3)) + prestress + gamma_eta * dCG(volume, dvolume_dt) * (1 + 2 * CG(volume) ** (-6))
+  - -stress + tau + 4 * gamma_W1 * (1 - CG(volume) ** (-3)) + prestress
   - dtau_dt + act * tau - gamma_sigma_max * act_plus
   - Qin - Qout - dvolume_dt
   - Pin - Pout

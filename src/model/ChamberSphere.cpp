@@ -12,10 +12,6 @@ void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
 
 void ChamberSphere::update_constant(SparseSystem& system,
                                     std::vector<double>& parameters) {
-  const double gamma_eta = parameters[global_param_ids[ParamId::gamma_eta]];
-  const double volume0 = parameters[global_param_ids[ParamId::volume0]];
-  const double n = parameters[global_param_ids[ParamId::n]];
-  system.E.coeffRef(global_eqn_ids[1], global_var_ids[6]) = 2*gamma_eta/(n*volume0);
   system.E.coeffRef(global_eqn_ids[2], global_var_ids[5]) = 1;
   system.E.coeffRef(global_eqn_ids[3], global_var_ids[6]) = -1;
   system.F.coeffRef(global_eqn_ids[0], global_var_ids[2]) = -1;
@@ -30,9 +26,12 @@ void ChamberSphere::update_constant(SparseSystem& system,
 
 void ChamberSphere::update_time(SparseSystem& system,
                                 std::vector<double>& parameters) {
+  const double gamma_sigma_max = parameters[global_param_ids[ParamId::gamma_sigma_max]];
+
   // active stress
   get_elastance_values(parameters);
   system.F.coeffRef(global_eqn_ids[2], global_var_ids[5]) = act;
+  system.C.coeffRef(global_eqn_ids[2]) = -act_plus*gamma_sigma_max;
 }
 
 void ChamberSphere::update_solution(
@@ -40,25 +39,17 @@ void ChamberSphere::update_solution(
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& y,
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& dy) {
   const double prestress = parameters[global_param_ids[ParamId::prestress]];
-  const double gamma_W1 = parameters[global_param_ids[ParamId::gamma_W1]];
-  const double gamma_eta = parameters[global_param_ids[ParamId::gamma_eta]];
   const double volume0 = parameters[global_param_ids[ParamId::volume0]];
-  const double gamma_sigma_max = parameters[global_param_ids[ParamId::gamma_sigma_max]];
-  const double n = parameters[global_param_ids[ParamId::n]];
-  const double volume = y[global_var_ids[6]];
-  const double dvolume_dt = dy[global_var_ids[6]];
-  const double stress = y[global_var_ids[4]];
+  const double gamma_W1 = parameters[global_param_ids[ParamId::gamma_W1]];
   const double Pout = y[global_var_ids[2]];
-  system.C.coeffRef(global_eqn_ids[0]) = -Pout*pow((volume + volume0)/volume0, (2.0/3.0)/n) + Pout + stress*pow((volume + volume0)/volume0, (1.0/3.0)/n) - stress;
-  system.C.coeffRef(global_eqn_ids[1]) = -2*dvolume_dt*gamma_eta/(n*volume0) + (2.0/3.0)*dvolume_dt*gamma_eta*pow(volume/volume0 + 1, -(5.0/3.0)/n)*pow(volume/volume0 + 1, -1 + (7.0/3.0)/n)/(n*volume0) + (4.0/3.0)*dvolume_dt*gamma_eta*pow(volume/volume0 + 1, -(17.0/3.0)/n)*pow(volume/volume0 + 1, -1 + (7.0/3.0)/n)/(n*volume0) + 4*gamma_W1 - 4*gamma_W1*pow(volume/volume0 + 1, -2/n) + prestress;
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) = 1 - pow((volume + volume0)/volume0, (2.0/3.0)/n);
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) = pow((volume + volume0)/volume0, (1.0/3.0)/n) - 1;
-  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) = (1.0/3.0)*pow((volume + volume0)/volume0, (1.0/3.0)/n)*(-2*Pout*pow((volume + volume0)/volume0, (1.0/3.0)/n) + stress)/(n*(volume + volume0));
-  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[6]) = (2.0/9.0)*pow((volume + volume0)/volume0, -(17.0/3.0)/n)*(dvolume_dt*gamma_eta*pow((volume + volume0)/volume0, (19.0/3.0 - n)/n)*(2 - 3*n) - 2*dvolume_dt*gamma_eta*pow((volume + volume0)/volume0, (1.0/3.0)*(7 - 3*n)/n)*(3*n + 10) + 36*gamma_W1*n*volume0*pow((volume + volume0)/volume0, (11.0/3.0)/n))/(pow(n, 2)*volume0*(volume + volume0));
-  system.dC_dydot.coeffRef(global_eqn_ids[1], global_var_ids[6]) = (2.0/3.0)*gamma_eta*pow((volume + volume0)/volume0, -(22.0/3.0)/n)*(-3*pow((volume + volume0)/volume0, (22.0/3.0)/n) + 2*pow((volume + volume0)/volume0, (4 - n)/n) + pow((volume + volume0)/volume0, (8 - n)/n))/(n*volume0);
-
-  // active stress
-  system.C.coeffRef(global_eqn_ids[2]) = -act_plus*gamma_sigma_max;
+  const double stress = y[global_var_ids[4]];
+  const double volume = y[global_var_ids[6]];
+  system.C.coeffRef(global_eqn_ids[0]) = -Pout*pow((volume + volume0)/volume0, 0.66666666666666663) + Pout + stress*pow((volume + volume0)/volume0, 0.33333333333333331) - stress;
+  system.C.coeffRef(global_eqn_ids[1]) = -4*gamma_W1*pow(volume/volume0 + 1, -2.0) + 4*gamma_W1 + prestress;
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) = 1 - pow((volume + volume0)/volume0, 0.66666666666666663);
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) = pow((volume + volume0)/volume0, 0.33333333333333331) - 1;
+  system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) = (-0.66666666666666663*Pout*pow((volume + volume0)/volume0, 0.66666666666666663) + 0.33333333333333331*stress*pow((volume + volume0)/volume0, 0.33333333333333331))/(volume + volume0);
+  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[6]) = 8.0*gamma_W1*pow((volume + volume0)/volume0, -3.0)/volume0;
 }
 
 void ChamberSphere::get_elastance_values(std::vector<double>& parameters) {

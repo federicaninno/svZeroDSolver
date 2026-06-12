@@ -39,10 +39,9 @@
  P_\text{out} C = 0
  * \f]
  *
- * 2. Spherical stress:
+ * 2. Spherical stress (shape correction factor \f$n = 1\f$, no viscosity):
  * \f[
- * -S + \tau + 4 (1 - C^{-3}) (W_1 + C W_2) + \eta \dot{C}
- * (1 + 2 C^{-6}) = 0
+ * -S + \tau + 4 (1 - C^{-3}) W_1 = 0
  * \f]
  *
  * 3. Volume change:
@@ -80,18 +79,15 @@
  *
  * Parameter sequence for constructing this block:
  *
- * * `rho` - Density \f$\rho\f$
- * * `thick0` - Wall thickness \f$d_0\f$
- * * `radius0` - Reference radius \f$r_0\f$
- * * `W1` - Material constant \f$W_1\f$
- * * `W2` - Material constant \f$W_2\f$
- * * `eta` - Viscosity parameter \f$\eta\f$
- * * `sigma_max` - Maximum active stress \f$\sigma_\text{max}\f$
+ * * `volume0` - Reference (unloaded) chamber volume \f$V_0\f$
+ * * `gamma_W1` - Scaled material constant \f$\gamma W_1\f$
+ * * `gamma_sigma_max` - Scaled maximum active stress \f$\gamma \sigma_\text{max}\f$
+ * * `prestress` - Prestress
  * * `alpha_max` - Maximum activation parameter \f$\alpha_\text{max}\f$
  * * `alpha_min` - Minimum activation parameter \f$\alpha_\text{min}\f$
  * * `tsys` - Systole timing parameter \f$t_\text{sys}\f$
  * * `tdias` - Diastole timing parameter \f$t_\text{dias}\f$
- * * `steepness` - Activation steepness parameter \f$\gamma\f$
+ * * `steepness` - Activation steepness parameter
  *
  * ### Usage in json configuration file
  *
@@ -103,13 +99,10 @@
  *            "vessel_name": "ventricle",
  *            "zero_d_element_type": "ChamberSphere",
  *            "zero_d_element_values": {
- *                "rho" : 1e3,
- *                "thick0" : 0.01,
- *                "radius0" : 0.05,
- *                "W1" : 10e3,
- *                "W2" : 40,
- *                "eta" : 10.0,
- *                "sigma_max" : 185e3,
+ *                "volume0" : 1e-4,
+ *                "gamma_W1" : 10e3,
+ *                "gamma_sigma_max" : 185e3,
+ *                "prestress" : 0.0,
  *                "alpha_max": 30.0,
  *                "alpha_min": -30.0,
  *                "tsys": 0.170,
@@ -137,17 +130,15 @@ class ChamberSphere : public Block {
    *
    */
   enum ParamId {
-    n = 0,
-    volume0 = 1,
-    gamma_W1 = 2,
-    gamma_eta = 3,
-    gamma_sigma_max = 4,
-    prestress = 5,
-    alpha_max = 6,
-    alpha_min = 7,
-    tsys = 8,
-    tdias = 9,
-    steepness = 10
+    volume0 = 0,
+    gamma_W1 = 1,
+    gamma_sigma_max = 2,
+    prestress = 3,
+    alpha_max = 4,
+    alpha_min = 5,
+    tsys = 6,
+    tdias = 7,
+    steepness = 8
   };
 
   /**
@@ -158,10 +149,8 @@ class ChamberSphere : public Block {
    */
   ChamberSphere(int id, Model* model)
       : Block(id, model, BlockType::chamber_sphere, BlockClass::vessel,
-              {{"n", InputParameter()},
-               {"volume0", InputParameter()},
+              {{"volume0", InputParameter()},
                {"gamma_W1", InputParameter()},
-               {"gamma_eta", InputParameter()},
                {"gamma_sigma_max", InputParameter()},
                {"prestress", InputParameter()},
                {"alpha_max", InputParameter()},
@@ -230,7 +219,7 @@ class ChamberSphere : public Block {
    * Number of triplets that the element contributes to the global system
    * (relevant for sparse memory reservation)
    */
-  TripletsContributions num_triplets{0, 0, 18};
+  TripletsContributions num_triplets{9, 2, 4};
 };
 
 #endif  // SVZERODSOLVER_MODEL_ChamberSphere_HPP_
