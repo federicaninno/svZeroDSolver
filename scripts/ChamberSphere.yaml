@@ -16,6 +16,8 @@ derivatives:
   - dtau_dt
   - dvolume_dt
 
+# Order must match the ParamId enum in ChamberSphere.h so that
+# global_param_ids[ParamId::<name>] lines up with the calibration parameters.
 # gamma has been absorbed into the (rescaled) stress/tau states by multiplying
 # residuals 2 and 3 through by gamma. It therefore only survives as the products
 # below, which are exactly the quantities provided in the solver input file.
@@ -25,15 +27,24 @@ constants:
   - volume0
   - gamma_W1
   - gamma_sigma_max # gamma * sigma_max
-  - act
-  - act_plus
   - prestress
+  - alpha_max
+  - alpha_min
+  - tsys
+  - tdias
+  - steepness
 
-time_dependent:
-  - act
-  - act_plus
+# In-cycle time of the activation. Not a state variable and not a calibration
+# parameter (no Jacobian column), but the activation depends on it. The solver
+# code computes the activation in ChamberSphere::get_elastance_values; here it is
+# written symbolically so that scripts/jacobian.py can differentiate the
+# active-stress equation with respect to the activation/timing parameters for the
+# calibrator's update_gradient. The two must stay consistent.
+time_symbol: t
 
 helper_functions: |
+  from sympy import Abs, Max, tanh
+
   def V(volume):
       return volume + volume0
 
@@ -44,6 +55,15 @@ helper_functions: |
   def CG(volume):
       stretch_val = stretch(volume)
       return (stretch_val) ** 2
+
+  # Active contraction activation, identical to
+  # ChamberSphere::get_elastance_values (t is the in-cycle time).
+  S_plus = 0.5 * (1.0 + tanh((t - tsys) / steepness))
+  S_minus = 0.5 * (1.0 - tanh((t - tdias) / steepness))
+  f = S_plus * S_minus
+  act_t = alpha_max * f + alpha_min * (1 - f)
+  act = Abs(act_t)
+  act_plus = Max(act_t, 0)
 
 residuals:
   - stretch(volume) * stress - Pout * CG(volume)

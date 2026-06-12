@@ -209,6 +209,33 @@ class ChamberSphere : public Block {
    */
   void get_elastance_values(std::vector<double>& parameters);
 
+  /**
+   * @brief Set the gradient of the block contributions with respect to the
+   * parameters
+   *
+   * Calibrates the chamber from a full-state observation set (the data carry the
+   * internal variables stress, tau, volume and their derivatives). The
+   * time-independent parameters (volume0, gamma_W1, prestress) appear in the
+   * momentum and spherical-stress equations, which are pure functions of the
+   * state. The active-stress equation (and its parameters gamma_sigma_max,
+   * alpha_max, alpha_min, tsys, tdias, steepness) depends on the observation
+   * time, supplied by the optimizer via ``model->time`` when a time vector is
+   * given; without it, only the time-independent parameters are identifiable.
+   * Residual/Jacobian expressions are derived symbolically (cf.
+   * scripts/jacobian.py from scripts/ChamberSphere.yaml).
+   *
+   * @param jacobian Jacobian with respect to the parameters
+   * @param residual Residual with respect to the parameters
+   * @param alpha Current parameter vector
+   * @param y Current solution
+   * @param dy Time-derivative of the current solution
+   */
+  void update_gradient(
+      Eigen::SparseMatrix<double>& jacobian,
+      Eigen::Matrix<double, Eigen::Dynamic, 1>& residual,
+      Eigen::Matrix<double, Eigen::Dynamic, 1>& alpha, std::vector<double>& y,
+      std::vector<double>& dy) override;
+
  private:
   double act = 0.0;       // activation function
   double act_plus = 0.0;  // act_plus = max(act, 0)
