@@ -117,7 +117,8 @@ def residual(theta, t, P, V, scale):
 
 
 FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm != "steepness"]  # 8 free params
-STEEPNESS_FIXED = 0.05  # s; activation transition width, held constant (not calibrated)
+STEEPNESS_FIXED = 0.005  # s; activation indicator smoothing, a numerical parameter
+# held at the model's canonical value (tests/cases/chamber_sphere.json), not calibrated
 
 
 def _expand(theta_free):
