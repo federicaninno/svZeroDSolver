@@ -116,16 +116,22 @@ def residual(theta, t, P, V, scale):
     return (tau_pred - tau_obs) / scale
 
 
-FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm != "steepness"]  # 8 free params
-STEEPNESS_FIXED = 0.005  # s; activation indicator smoothing, a numerical parameter
-# held at the model's canonical value (tests/cases/chamber_sphere.json), not calibrated
+# Parameters held constant (not calibrated):
+#  - steepness: numerical smoothing of the activation indicator, kept at the
+#    model's canonical value (tests/cases/chamber_sphere.json).
+#  - prestress: an additive offset in the passive stress that is confounded with
+#    volume0. Setting it to zero anchors the passive stress to vanish at the
+#    unloaded volume, which makes volume0 identifiable.
+FIXED = {"steepness": 0.005, "prestress": 0.0}
+FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in FIXED]  # 7 free params
 
 
 def _expand(theta_free):
-    """Insert the fixed steepness back into a full 9-parameter vector."""
+    """Insert the fixed parameters back into a full 9-parameter vector."""
     theta = np.empty(len(PARAM_NAMES))
     theta[FREE] = theta_free
-    theta[PARAM_NAMES.index("steepness")] = STEEPNESS_FIXED
+    for nm, val in FIXED.items():
+        theta[PARAM_NAMES.index(nm)] = val
     return theta
 
 
@@ -140,18 +146,18 @@ def calibrate_cycle(t, P, V):
         0.6 * Vmin,    # volume0 (unloaded < ESV)
         2.0e3,         # gamma_W1
         2.0e4,         # gamma_sigma_max
-        1.0e2,         # prestress
+        FIXED["prestress"],
         25.0,          # alpha_max
         -25.0,         # alpha_min
         0.03,          # tsys (just after EDV)
         0.32,          # tdias
-        STEEPNESS_FIXED,
+        FIXED["steepness"],
     ])
     lb_full = np.array([1e-6, 0.0, 0.0, -1e4, 1.0, -200.0, 0.0, 0.0, 5e-3])
     ub_full = np.array([0.99 * Vmin, 1e6, 1e7, 1e4, 200.0, -1.0, 0.6, 0.9, 0.3])
     theta0_full = np.clip(theta0_full, lb_full + 1e-12, ub_full - 1e-12)
 
-    # steepness is held constant: optimize only the 8 free parameters
+    # the fixed parameters are held constant: optimize only the free ones
     theta0, lb, ub = theta0_full[FREE], lb_full[FREE], ub_full[FREE]
 
     # residual scale ~ characteristic stress rate, keeps the cost well-scaled
@@ -227,7 +233,7 @@ def main():
     print("-" * 80)
     for i, nm in enumerate(PARAM_NAMES):
         col = thetas[:, i]
-        if nm == "steepness":
+        if nm in FIXED:
             print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
                   f"{'-':>13}{'-':>13}{'-':>10}{'-':>9}  fixed")
             continue
