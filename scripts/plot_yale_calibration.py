@@ -37,13 +37,15 @@ def fig_distributions(thetas, bounds):
     for i, ax in enumerate(axes.flat):
         col = thetas[:, i]
         pct_bound = 100.0 * np.mean(bounds[:, i])
+        fixed = NAMES[i] == "steepness"
         poor = pct_bound > 50
-        ax.hist(col, bins=24, color="#c44" if poor else "#39a",
-                edgecolor="white", alpha=0.85)
+        color = "#888" if fixed else ("#c44" if poor else "#39a")
+        ax.hist(col, bins=24, color=color, edgecolor="white", alpha=0.85)
         ax.axvline(np.median(col), color="k", ls="--", lw=1)
-        tag = "NOT identifiable" if poor else "identifiable"
+        tag = "fixed (not calibrated)" if fixed else (
+            "NOT identifiable" if poor else "identifiable")
         ax.set_title(f"{NAMES[i]}  [{UNITS[i]}]\nmedian={np.median(col):.3g}  ({tag})",
-                     fontsize=9, color="#c44" if poor else "black")
+                     fontsize=9, color=color if (poor or fixed) else "black")
         ax.tick_params(labelsize=8)
     fig.suptitle("Parameter distributions across 124 cardiac cycles", fontsize=13)
     fig.tight_layout(rect=[0, 0, 1, 0.97])

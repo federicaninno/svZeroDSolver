@@ -116,10 +116,26 @@ def residual(theta, t, P, V, scale):
     return (tau_pred - tau_obs) / scale
 
 
+FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm != "steepness"]  # 8 free params
+STEEPNESS_FIXED = 0.05  # s; activation transition width, held constant (not calibrated)
+
+
+def _expand(theta_free):
+    """Insert the fixed steepness back into a full 9-parameter vector."""
+    theta = np.empty(len(PARAM_NAMES))
+    theta[FREE] = theta_free
+    theta[PARAM_NAMES.index("steepness")] = STEEPNESS_FIXED
+    return theta
+
+
+def residual_free(theta_free, t, P, V, scale):
+    return residual(_expand(theta_free), t, P, V, scale)
+
+
 def calibrate_cycle(t, P, V):
     Vmin = V.min()
-    # physiologically-motivated start guess (SI)
-    theta0 = np.array([
+    # physiologically-motivated start guess (SI), full 9-vector
+    theta0_full = np.array([
         0.6 * Vmin,    # volume0 (unloaded < ESV)
         2.0e3,         # gamma_W1
         2.0e4,         # gamma_sigma_max
@@ -128,19 +144,29 @@ def calibrate_cycle(t, P, V):
         -25.0,         # alpha_min
         0.03,          # tsys (just after EDV)
         0.32,          # tdias
-        0.04,          # steepness
+        STEEPNESS_FIXED,
     ])
-    lb = np.array([1e-6, 0.0, 0.0, -1e4, 1.0, -200.0, 0.0, 0.0, 5e-3])
-    ub = np.array([0.99 * Vmin, 1e6, 1e7, 1e4, 200.0, -1.0, 0.6, 0.9, 0.3])
-    theta0 = np.clip(theta0, lb + 1e-12, ub - 1e-12)
+    lb_full = np.array([1e-6, 0.0, 0.0, -1e4, 1.0, -200.0, 0.0, 0.0, 5e-3])
+    ub_full = np.array([0.99 * Vmin, 1e6, 1e7, 1e4, 200.0, -1.0, 0.6, 0.9, 0.3])
+    theta0_full = np.clip(theta0_full, lb_full + 1e-12, ub_full - 1e-12)
+
+    # steepness is held constant: optimize only the 8 free parameters
+    theta0, lb, ub = theta0_full[FREE], lb_full[FREE], ub_full[FREE]
 
     # residual scale ~ characteristic stress rate, keeps the cost well-scaled
     scale = max(np.max(np.abs(P)) * 1.0, 1.0e3)
 
-    res = least_squares(
-        residual, theta0, args=(t, P, V, scale), bounds=(lb, ub),
+    res_free = least_squares(
+        residual_free, theta0, args=(t, P, V, scale), bounds=(lb, ub),
         method="trf", x_scale="jac", max_nfev=2000, ftol=1e-12, xtol=1e-12,
     )
+
+    class _R:  # adapt the 8-free result to the rest of the function (full 9-vector)
+        pass
+    res = _R()
+    res.x = _expand(res_free.x)
+    res.jac = res_free.jac
+    res.cost = res_free.cost
     tau_obs = reconstruct_tau(res.x, P, V)
     tau_pred = integrate_tau(res.x, t, tau_obs[0])
     rms = np.sqrt(np.mean((tau_pred - tau_obs) ** 2))  # Pa
@@ -148,13 +174,18 @@ def calibrate_cycle(t, P, V):
 
     # Per-parameter relative standard error from the Jacobian covariance, a
     # local identifiability measure (large -> the data does not constrain that
-    # parameter). A parameter pinned at a bound is flagged separately.
+    # parameter). A parameter pinned at a bound is flagged separately. These are
+    # computed for the 8 free parameters and scattered back into a 9-vector;
+    # the fixed steepness gets NaN (not calibrated).
     m, n = res.jac.shape
     dof = max(m - n, 1)
     cov = np.linalg.pinv(res.jac.T @ res.jac) * (2.0 * res.cost / dof)
-    se = np.sqrt(np.clip(np.diag(cov), 0.0, None))  # parameter units
-    rel_se = se / np.maximum(np.abs(res.x), 1e-30)
-    at_bound = (res.x <= lb + 1e-6 * (ub - lb)) | (res.x >= ub - 1e-6 * (ub - lb))
+    se = np.sqrt(np.clip(np.diag(cov), 0.0, None))  # free-parameter units
+    rel_se = np.full(len(PARAM_NAMES), np.nan)
+    rel_se[FREE] = se / np.maximum(np.abs(res_free.x), 1e-30)
+    at_bound = np.zeros(len(PARAM_NAMES), bool)
+    at_bound[FREE] = (res_free.x <= lb + 1e-6 * (ub - lb)) | (
+        res_free.x >= ub - 1e-6 * (ub - lb))
     return res.x, rms, tau_amp, rel_se, at_bound
 
 
@@ -195,7 +226,11 @@ def main():
     print("-" * 80)
     for i, nm in enumerate(PARAM_NAMES):
         col = thetas[:, i]
-        med_relse = np.median(relses[:, i])
+        if nm == "steepness":
+            print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
+                  f"{'-':>13}{'-':>13}{'-':>10}{'-':>9}  fixed")
+            continue
+        med_relse = np.nanmedian(relses[:, i])
         pct_bound = 100.0 * np.mean(bounds[:, i])
         ident = "well" if med_relse < 0.1 and pct_bound < 20 else (
             "weak" if med_relse < 1.0 and pct_bound < 60 else "poor")
