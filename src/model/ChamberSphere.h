@@ -39,10 +39,17 @@
  P_\text{out} C = 0
  * \f]
  *
- * 2. Spherical stress (shape correction factor \f$n = 1\f$, no viscosity):
+ * 2. Spherical stress (shape correction factor \f$n = 1\f$, no viscosity), with
+ * a Guccione passive wall stress \f$S_\text{pas}\f$:
  * \f[
- * -S + \tau + 4 (1 - C^{-3}) W_1 = 0
+ * -S + \tau + S_\text{pas} = 0, \quad
+ * S_\text{pas} = C e^{Q} \left[ \frac{b_f + b_t}{2} \lambda^2 E_p
+ * - b_t \lambda^{-4} E_r \right] + \text{prestress}
  * \f]
+ * with \f$\lambda^2 = C_G\f$, in-plane/radial Green-Lagrange strains
+ * \f$E_p = (\lambda^2 - 1)/2\f$, \f$E_r = (\lambda^{-4} - 1)/2\f$ and
+ * \f$Q = (b_f + b_t) E_p^2 + b_t E_r^2\f$. The shear exponent \f$b_{fs}\f$ drops
+ * out because the equibiaxial spherical deformation has no shear.
  *
  * 3. Volume change:
  * \f[
@@ -80,7 +87,7 @@
  * Parameter sequence for constructing this block:
  *
  * * `volume0` - Reference (unloaded) chamber volume \f$V_0\f$
- * * `gamma_W1` - Scaled material constant \f$\gamma W_1\f$
+ * * `guccione_C` - Scaled Guccione passive scaling \f$\gamma C\f$
  * * `gamma_sigma_max` - Scaled maximum active stress \f$\gamma \sigma_\text{max}\f$
  * * `prestress` - Prestress
  * * `alpha_max` - Maximum activation parameter \f$\alpha_\text{max}\f$
@@ -88,6 +95,8 @@
  * * `tsys` - Systole timing parameter \f$t_\text{sys}\f$
  * * `tdias` - Diastole timing parameter \f$t_\text{dias}\f$
  * * `steepness` - Activation steepness parameter
+ * * `b_f` - Guccione fiber exponent (dimensionless)
+ * * `b_t` - Guccione transverse exponent (dimensionless)
  *
  * ### Usage in json configuration file
  *
@@ -100,14 +109,16 @@
  *            "zero_d_element_type": "ChamberSphere",
  *            "zero_d_element_values": {
  *                "volume0" : 1e-4,
- *                "gamma_W1" : 10e3,
+ *                "guccione_C" : 1e3,
  *                "gamma_sigma_max" : 185e3,
  *                "prestress" : 0.0,
  *                "alpha_max": 30.0,
  *                "alpha_min": -30.0,
  *                "tsys": 0.170,
  *                "tdias": 0.484,
- *                "steepness": 0.005
+ *                "steepness": 0.005,
+ *                "b_f": 8.0,
+ *                "b_t": 3.0
  *            }
  *        }
  *     ]
@@ -131,14 +142,16 @@ class ChamberSphere : public Block {
    */
   enum ParamId {
     volume0 = 0,
-    gamma_W1 = 1,
+    guccione_C = 1,
     gamma_sigma_max = 2,
     prestress = 3,
     alpha_max = 4,
     alpha_min = 5,
     tsys = 6,
     tdias = 7,
-    steepness = 8
+    steepness = 8,
+    b_f = 9,
+    b_t = 10
   };
 
   /**
@@ -150,14 +163,16 @@ class ChamberSphere : public Block {
   ChamberSphere(int id, Model* model)
       : Block(id, model, BlockType::chamber_sphere, BlockClass::vessel,
               {{"volume0", InputParameter()},
-               {"gamma_W1", InputParameter()},
+               {"guccione_C", InputParameter()},
                {"gamma_sigma_max", InputParameter()},
                {"prestress", InputParameter()},
                {"alpha_max", InputParameter()},
                {"alpha_min", InputParameter()},
                {"tsys", InputParameter()},
                {"tdias", InputParameter()},
-               {"steepness", InputParameter()}}) {}
+               {"steepness", InputParameter()},
+               {"b_f", InputParameter()},
+               {"b_t", InputParameter()}}) {}
 
   /**
    * @brief Set up the degrees of freedom (DOF) of the block

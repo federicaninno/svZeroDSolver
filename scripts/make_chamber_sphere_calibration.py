@@ -35,7 +35,7 @@ OUT = os.path.join(REPO, "tests", "cases", "chamber_sphere_calibration.json")
 # meaningful). Order matches the ParamId enum in ChamberSphere.h.
 TRUE = {
     "volume0": 1.0e-4,
-    "gamma_W1": 1.0e4,
+    "guccione_C": 1.0e3,
     "gamma_sigma_max": 1.85e5,
     "prestress": 1.0e3,
     "alpha_max": 30.0,
@@ -43,7 +43,18 @@ TRUE = {
     "tsys": 0.17,
     "tdias": 0.484,
     "steepness": 0.05,
+    "b_f": 8.0,
+    "b_t": 3.0,
 }
+
+
+def passive_guccione(lam, C, b_f, b_t):
+    """Guccione passive spherical wall stress (matches ChamberSphere)."""
+    Ep = 0.5 * (lam ** 2 - 1.0)
+    Er = 0.5 * (lam ** (-4) - 1.0)
+    Q = (b_f + b_t) * Ep ** 2 + b_t * Er ** 2
+    return C * np.exp(Q) * (
+        0.5 * (b_f + b_t) * lam ** 2 * Ep - b_t * lam ** (-4) * Er)
 PERIOD = 1.0
 NUM_OBS = 200
 PERTURB = 1.20  # 20% perturbed start
@@ -98,7 +109,8 @@ def main():
     # Reconstruct the consistent full state (every residual vanishes exactly).
     act, act_plus = activation(t, p)
     dtau_dt = -act * tau + p["gamma_sigma_max"] * act_plus          # residual 2
-    stress = tau + 4.0 * p["gamma_W1"] * (1.0 - CG ** (-3)) + p["prestress"]  # residual 1
+    stress = tau + passive_guccione(stretch, p["guccione_C"], p["b_f"], p["b_t"]) \
+        + p["prestress"]                                            # residual 1
     Pout = stress / stretch                                          # residual 0
     Pin = Pout                                                       # residual 4
 
@@ -179,7 +191,7 @@ def main():
         rel = abs(calibrated[k] - TRUE[k]) / abs(TRUE[k])
         ok = ok and rel < 1e-6
         print(f"{k:<18}{TRUE[k]:>14.6g}{start[k]:>14.6g}{calibrated[k]:>16.8g}{rel:>12.2e}")
-    print(f"\nAll 9 parameters recovered to rtol<1e-6: {ok}")
+    print(f"\nAll {len(names)} parameters recovered to rtol<1e-6: {ok}")
     return 0 if ok else 1
 
 

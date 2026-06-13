@@ -23,9 +23,10 @@ derivatives:
 # below, which are exactly the quantities provided in the solver input file.
 #   stress  here represents  gamma * stress
 #   tau     here represents  gamma * tau
+#   guccione_C represents    gamma * C  (the Guccione passive scaling)
 constants:
   - volume0
-  - gamma_W1
+  - guccione_C # gamma * C, scaling in front of the Guccione exponential
   - gamma_sigma_max # gamma * sigma_max
   - prestress
   - alpha_max
@@ -33,6 +34,8 @@ constants:
   - tsys
   - tdias
   - steepness
+  - b_f # Guccione fiber exponent (dimensionless)
+  - b_t # Guccione transverse exponent (dimensionless)
 
 # In-cycle time of the activation. Not a state variable and not a calibration
 # parameter (no Jacobian column), but the activation depends on it. The solver
@@ -43,7 +46,7 @@ constants:
 time_symbol: t
 
 helper_functions: |
-  from sympy import Abs, Max, tanh
+  from sympy import Abs, Max, tanh, exp
 
   def V(volume):
       return volume + volume0
@@ -56,6 +59,27 @@ helper_functions: |
       stretch_val = stretch(volume)
       return (stretch_val) ** 2
 
+  # Guccione passive spherical wall stress for a thin-walled incompressible
+  # sphere. The in-plane stretch is lam = stretch, the radial stretch lam^-2, so
+  # the Green-Lagrange strains are E_p = (lam^2 - 1)/2 (in-plane fiber/sheet) and
+  # E_r = (lam^-4 - 1)/2 (radial). With no shear, Q = (b_f + b_t) E_p^2 + b_t E_r^2
+  # and the mean in-plane Cauchy stress (sigma_radial = 0 for the thin wall) is
+  #   S = C exp(Q) [ (b_f + b_t)/2 lam^2 E_p - b_t lam^-4 E_r ].
+  # b_fs drops out: it only multiplies shear terms, which vanish here.
+  def E_p(volume):
+      return 0.5 * (CG(volume) - 1)
+
+  def E_r(volume):
+      return 0.5 * (CG(volume) ** (-2) - 1)
+
+  def Q_guc(volume):
+      return (b_f + b_t) * E_p(volume) ** 2 + b_t * E_r(volume) ** 2
+
+  def passive(volume):
+      cg = CG(volume)
+      return guccione_C * exp(Q_guc(volume)) * (
+          0.5 * (b_f + b_t) * cg * E_p(volume) - b_t * cg ** (-2) * E_r(volume))
+
   # Active contraction activation, identical to
   # ChamberSphere::get_elastance_values (t is the in-cycle time).
   S_plus = 0.5 * (1.0 + tanh((t - tsys) / steepness))
@@ -67,7 +91,7 @@ helper_functions: |
 
 residuals:
   - stretch(volume) * stress - Pout * CG(volume)
-  - -stress + tau + 4 * gamma_W1 * (1 - CG(volume) ** (-3)) + prestress
+  - -stress + tau + passive(volume) + prestress
   - dtau_dt + act * tau - gamma_sigma_max * act_plus
   - Qin - Qout - dvolume_dt
   - Pin - Pout
