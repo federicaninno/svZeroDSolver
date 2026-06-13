@@ -27,13 +27,13 @@ derivatives:
 constants:
   - volume0
   - guccione_C # gamma * C, scaling in front of the Guccione exponential
-  - gamma_sigma_max # gamma * sigma_max
+  - gamma_sigma_max # gamma * sigma_max, active-stress amplitude
   - prestress
-  - alpha_max
-  - alpha_min
-  - tsys
-  - tdias
-  - steepness
+  - t_shift # two-hill twitch onset
+  - tau_1 # two-hill rise time
+  - tau_2 # two-hill fall time
+  - m1 # two-hill rise exponent
+  - m2 # two-hill fall exponent
   - b_f # Guccione fiber exponent (dimensionless)
   - b_t # Guccione transverse exponent (dimensionless)
 
@@ -46,7 +46,7 @@ constants:
 time_symbol: t
 
 helper_functions: |
-  from sympy import Abs, Max, tanh, exp
+  from sympy import exp
 
   def V(volume):
       return volume + volume0
@@ -80,18 +80,18 @@ helper_functions: |
       return guccione_C * exp(Q_guc(volume)) * (
           0.5 * (b_f + b_t) * cg * E_p(volume) - b_t * cg ** (-2) * E_r(volume))
 
-  # Active contraction activation, identical to
-  # ChamberSphere::get_elastance_values (t is the in-cycle time).
-  S_plus = 0.5 * (1.0 + tanh((t - tsys) / steepness))
-  S_minus = 0.5 * (1.0 - tanh((t - tdias) / steepness))
-  f = S_plus * S_minus
-  act_t = alpha_max * f + alpha_min * (1 - f)
-  act = Abs(act_t)
-  act_plus = Max(act_t, 0)
+  # Smooth two-hill activation twitch in [0, ~1): a rising hill g1/(1+g1) times a
+  # falling hill 1/(1+g2). Produces a single peaked hump (so the active stress and
+  # P-V loop are rounded, not rectangular). t is the in-cycle time; gamma_sigma_max
+  # absorbs the (un)normalization. Identical to ChamberSphere::get_elastance_values.
+  ts = t - t_shift
+  g1 = (ts / tau_1) ** m1
+  g2 = (ts / tau_2) ** m2
+  activation = g1 / (1 + g1) / (1 + g2)
 
 residuals:
   - stretch(volume) * stress - Pout * CG(volume)
   - -stress + tau + passive(volume) + prestress
-  - dtau_dt + act * tau - gamma_sigma_max * act_plus
+  - tau - gamma_sigma_max * activation
   - Qin - Qout - dvolume_dt
   - Pin - Pout

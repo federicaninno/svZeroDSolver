@@ -25,7 +25,7 @@ IN_LABELS = ["a_ventricles", "EDP_lv", "Rsys"]
 IN_NICE = ["contractility\n(a_ventricles)", "preload\n(EDP_lv)", "afterload\n(Rsys)"]
 # fitted parameters to relate (drop alpha_max: railed constant; steepness: fixed)
 FIT_KEYS = ["volume0", "guccione_C", "gamma_sigma_max", "prestress",
-            "alpha_min", "tsys", "tdias"]
+            "tau_1", "tau_2", "m1"]
 
 
 def load():

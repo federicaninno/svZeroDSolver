@@ -11,10 +11,9 @@ BASE = os.path.expanduser("~/Downloads/simulations_data_yale")
 X = np.loadtxt(os.path.join(BASE, "data", "X.txt"))  # [125,3]: a_ventricles, EDP_lv, Rsys
 IN_NAMES = ["a_ventricles", "EDP_lv", "Rsys"]
 FIT_KEYS = ["guccione_C", "gamma_sigma_max", "prestress", "volume0",
-            "alpha_max", "alpha_min", "tsys", "tdias"]
+            "tau_1", "tau_2", "m1", "m2"]
 UNITS = {"guccione_C": "Pa", "gamma_sigma_max": "Pa", "prestress": "Pa",
-         "volume0": "mL", "alpha_max": "1/s", "alpha_min": "1/s",
-         "tsys": "s", "tdias": "s"}
+         "volume0": "mL", "tau_1": "s", "tau_2": "s", "m1": "-", "m2": "-"}
 
 
 def load():

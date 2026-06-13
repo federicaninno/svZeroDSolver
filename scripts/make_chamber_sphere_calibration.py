@@ -38,11 +38,11 @@ TRUE = {
     "guccione_C": 1.0e3,
     "gamma_sigma_max": 1.85e5,
     "prestress": 1.0e3,
-    "alpha_max": 30.0,
-    "alpha_min": -30.0,
-    "tsys": 0.17,
-    "tdias": 0.484,
-    "steepness": 0.05,
+    "t_shift": -0.05,   # negative so the twitch argument stays > 0 (log-safe Jacobian)
+    "tau_1": 0.12,
+    "tau_2": 0.30,
+    "m1": 8.0,
+    "m2": 8.0,
     "b_f": 8.0,
     "b_t": 3.0,
 }
@@ -60,15 +60,13 @@ NUM_OBS = 200
 PERTURB = 1.20  # 20% perturbed start
 
 
-def activation(t, p):
-    """Active-stress activation, identical to ChamberSphere::get_elastance_values
-    and to the symbolic definition in scripts/ChamberSphere.yaml."""
-    tc = np.mod(t, PERIOD)
-    s_plus = 0.5 * (1.0 + np.tanh((tc - p["tsys"]) / p["steepness"]))
-    s_minus = 0.5 * (1.0 - np.tanh((tc - p["tdias"]) / p["steepness"]))
-    f = s_plus * s_minus
-    act_t = p["alpha_max"] * f + p["alpha_min"] * (1.0 - f)
-    return np.abs(act_t), np.maximum(act_t, 0.0)
+def twohill(t, p):
+    """Two-hill activation twitch, identical to the symbolic definition in
+    scripts/ChamberSphere.yaml."""
+    ts = t - p["t_shift"]
+    g1 = (ts / p["tau_1"]) ** p["m1"]
+    g2 = (ts / p["tau_2"]) ** p["m2"]
+    return g1 / (1.0 + g1) / (1.0 + g2)
 
 
 def forward_sim():
@@ -107,8 +105,7 @@ def main():
     CG = stretch ** 2
 
     # Reconstruct the consistent full state (every residual vanishes exactly).
-    act, act_plus = activation(t, p)
-    dtau_dt = -act * tau + p["gamma_sigma_max"] * act_plus          # residual 2
+    tau = p["gamma_sigma_max"] * twohill(t, p)                       # residual 2 (algebraic)
     stress = tau + passive_guccione(stretch, p["guccione_C"], p["b_f"], p["b_t"]) \
         + p["prestress"]                                            # residual 1
     Pout = stress / stretch                                          # residual 0
@@ -135,7 +132,7 @@ def main():
         "pressure:ventricle:OUT": zeros,
         "flow:ventricle:OUT": zeros,
         "stress:ventricle": zeros,
-        "tau:ventricle": dtau_dt,
+        "tau:ventricle": zeros,   # active stress is algebraic; dtau_dt unused
         "volume:ventricle": dvolume_dt,
     }
 

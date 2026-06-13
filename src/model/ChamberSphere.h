@@ -56,16 +56,15 @@
  * 4 \pi r_0^2 Cv - \dot{V} = 0
  * \f]
  *
- * 4. Active stress:
+ * 4. Active stress (smooth two-hill twitch, no longer a rate ODE):
  * \f[
- * \dot{\tau} + a \tau - \sigma_\text{max} a_+ = 0, \quad a_+ = \max(a, 0),
- \quad a = f\alpha_\text{max} + (1 - f)\alpha_\text{min}
+ * \tau - \sigma_\text{max} A(t) = 0, \quad
+ * A(t) = \frac{g_1}{1 + g_1} \cdot \frac{1}{1 + g_2}
  * \f]
- * with indicator function
- * \f[
- * f = S_+ \cdot S_-, \quad S_\pm = \frac{1}{2} \left(1.0 \pm \text{tanh}\left(
- \frac{t - t_\text{sys/dias}} {\gamma} \right) \right)
- * \f]
+ * with \f$g_1 = (t_s/\tau_1)^{m_1}\f$, \f$g_2 = (t_s/\tau_2)^{m_2}\f$ and
+ * \f$t_s = t - t_\text{shift}\f$. The rising hill \f$g_1/(1+g_1)\f$ and falling
+ * hill \f$1/(1+g_2)\f$ give a single peaked twitch (rounded, not rectangular,
+ * P-V loop).
  *
  * 5. Acceleration:
  * \f[
@@ -90,11 +89,11 @@
  * * `guccione_C` - Scaled Guccione passive scaling \f$\gamma C\f$
  * * `gamma_sigma_max` - Scaled maximum active stress \f$\gamma \sigma_\text{max}\f$
  * * `prestress` - Prestress
- * * `alpha_max` - Maximum activation parameter \f$\alpha_\text{max}\f$
- * * `alpha_min` - Minimum activation parameter \f$\alpha_\text{min}\f$
- * * `tsys` - Systole timing parameter \f$t_\text{sys}\f$
- * * `tdias` - Diastole timing parameter \f$t_\text{dias}\f$
- * * `steepness` - Activation steepness parameter
+ * * `t_shift` - Two-hill twitch onset \f$t_\text{shift}\f$
+ * * `tau_1` - Two-hill rise time \f$\tau_1\f$
+ * * `tau_2` - Two-hill fall time \f$\tau_2\f$
+ * * `m1` - Two-hill rise exponent \f$m_1\f$
+ * * `m2` - Two-hill fall exponent \f$m_2\f$
  * * `b_f` - Guccione fiber exponent (dimensionless)
  * * `b_t` - Guccione transverse exponent (dimensionless)
  *
@@ -112,11 +111,11 @@
  *                "guccione_C" : 1e3,
  *                "gamma_sigma_max" : 185e3,
  *                "prestress" : 0.0,
- *                "alpha_max": 30.0,
- *                "alpha_min": -30.0,
- *                "tsys": 0.170,
- *                "tdias": 0.484,
- *                "steepness": 0.005,
+ *                "t_shift": 0.0,
+ *                "tau_1": 0.12,
+ *                "tau_2": 0.30,
+ *                "m1": 8.0,
+ *                "m2": 8.0,
  *                "b_f": 8.0,
  *                "b_t": 3.0
  *            }
@@ -145,11 +144,11 @@ class ChamberSphere : public Block {
     guccione_C = 1,
     gamma_sigma_max = 2,
     prestress = 3,
-    alpha_max = 4,
-    alpha_min = 5,
-    tsys = 6,
-    tdias = 7,
-    steepness = 8,
+    t_shift = 4,
+    tau_1 = 5,
+    tau_2 = 6,
+    m1 = 7,
+    m2 = 8,
     b_f = 9,
     b_t = 10
   };
@@ -166,11 +165,11 @@ class ChamberSphere : public Block {
                {"guccione_C", InputParameter()},
                {"gamma_sigma_max", InputParameter()},
                {"prestress", InputParameter()},
-               {"alpha_max", InputParameter()},
-               {"alpha_min", InputParameter()},
-               {"tsys", InputParameter()},
-               {"tdias", InputParameter()},
-               {"steepness", InputParameter()},
+               {"t_shift", InputParameter()},
+               {"tau_1", InputParameter()},
+               {"tau_2", InputParameter()},
+               {"m1", InputParameter()},
+               {"m2", InputParameter()},
                {"b_f", InputParameter()},
                {"b_t", InputParameter()}}) {}
 
@@ -218,24 +217,17 @@ class ChamberSphere : public Block {
                        const Eigen::Matrix<double, Eigen::Dynamic, 1>& dy);
 
   /**
-   * @brief Update the elastance functions which depend on time
-   *
-   * @param parameters Parameters of the model
-   */
-  void get_elastance_values(std::vector<double>& parameters);
-
-  /**
    * @brief Set the gradient of the block contributions with respect to the
    * parameters
    *
    * Calibrates the chamber from a full-state observation set (the data carry the
-   * internal variables stress, tau, volume and their derivatives). The
-   * time-independent parameters (volume0, gamma_W1, prestress) appear in the
-   * momentum and spherical-stress equations, which are pure functions of the
-   * state. The active-stress equation (and its parameters gamma_sigma_max,
-   * alpha_max, alpha_min, tsys, tdias, steepness) depends on the observation
-   * time, supplied by the optimizer via ``model->time`` when a time vector is
-   * given; without it, only the time-independent parameters are identifiable.
+   * internal variables stress, tau, volume and their derivatives). The passive
+   * parameters (volume0, guccione_C, prestress, b_f, b_t) appear in the momentum
+   * and spherical-stress equations, which are pure functions of the state. The
+   * active-stress equation (and its parameters gamma_sigma_max and the two-hill
+   * twitch t_shift, tau_1, tau_2, m1, m2) depends on the observation time,
+   * supplied by the optimizer via ``model->time`` when a time vector is given;
+   * without it, only the time-independent parameters are identifiable.
    * Residual/Jacobian expressions are derived symbolically (cf.
    * scripts/jacobian.py from scripts/ChamberSphere.yaml).
    *
@@ -252,16 +244,13 @@ class ChamberSphere : public Block {
       std::vector<double>& dy) override;
 
  private:
-  double act = 0.0;       // activation function
-  double act_plus = 0.0;  // act_plus = max(act, 0)
-
   /**
    * @brief Number of triplets of element
    *
    * Number of triplets that the element contributes to the global system
    * (relevant for sparse memory reservation)
    */
-  TripletsContributions num_triplets{9, 2, 4};
+  TripletsContributions num_triplets{9, 1, 4};
 };
 
 #endif  // SVZERODSOLVER_MODEL_ChamberSphere_HPP_

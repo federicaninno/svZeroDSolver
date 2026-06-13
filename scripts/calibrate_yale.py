@@ -36,7 +36,7 @@ OUT_DIR = os.path.expanduser("~/Downloads/simulations_data_yale")
 
 PARAM_NAMES = [
     "volume0", "guccione_C", "gamma_sigma_max", "prestress",
-    "alpha_max", "alpha_min", "tsys", "tdias", "steepness",
+    "t_shift", "tau_1", "tau_2", "m1", "m2",
 ]
 
 
@@ -102,13 +102,15 @@ def load_cycle(path):
     return t / 1000.0, P * MMHG_TO_PA, V * ML_TO_M3
 
 
-def activation(t, alpha_max, alpha_min, tsys, tdias, steepness):
-    tc = np.mod(t, PERIOD)
-    s_plus = 0.5 * (1.0 + np.tanh((tc - tsys) / steepness))
-    s_minus = 0.5 * (1.0 - np.tanh((tc - tdias) / steepness))
-    f = s_plus * s_minus
-    act_t = alpha_max * f + alpha_min * (1.0 - f)
-    return np.abs(act_t), np.maximum(act_t, 0.0)
+def twohill(t, t_shift, tau_1, tau_2, m1, m2):
+    """Smooth two-hill activation twitch in [0, ~1): a rising hill g1/(1+g1) times
+    a falling hill 1/(1+g2). Produces a single peaked hump (unlike the boxcar
+    indicator), so the active stress and P-V loop are rounded rather than
+    rectangular. gamma_sigma_max absorbs the (un)normalization."""
+    ts = np.mod(t - t_shift, PERIOD)
+    g1 = (ts / tau_1) ** m1
+    g2 = (ts / tau_2) ** m2
+    return g1 / (1.0 + g1) / (1.0 + g2)
 
 
 def reconstruct_tau(theta, P, V, b_f, b_t):
@@ -121,49 +123,34 @@ def reconstruct_tau(theta, P, V, b_f, b_t):
     return tau
 
 
-def integrate_tau(theta, t, tau0):
-    """Predict tau by integrating the active-stress ODE (residual 2),
-    dtau/dt = -act*tau + gamma_sigma_max*act_plus, with a stable backward-Euler
-    step on the uniform time grid."""
-    gamma_sigma_max = theta[2]
-    act, act_plus = activation(t, *theta[4:9])
-    dt = np.diff(t)
-    tau = np.empty_like(t)
-    tau[0] = tau0
-    for i in range(len(t) - 1):
-        h = dt[i]
-        tau[i + 1] = (tau[i] + h * gamma_sigma_max * act_plus[i + 1]) / (
-            1.0 + h * act[i + 1]
-        )
-    return tau
+def model_tau(theta, t):
+    """Active stress from the algebraic two-hill twitch: tau = gamma_sigma_max A(t)."""
+    return theta[2] * twohill(t, *theta[4:9])
 
 
 def residual(theta, t, P, V, scale, b_f, b_t):
     # tau reconstructed from the data (depends on the material parameters) ...
     tau_obs = reconstruct_tau(theta, P, V, b_f, b_t)
-    # ... must be consistent with the active-stress ODE (activation parameters).
-    tau_pred = integrate_tau(theta, t, tau_obs[0])
-    return (tau_pred - tau_obs) / scale
+    # ... must match the smooth two-hill active-stress twitch.
+    return (model_tau(theta, t) - tau_obs) / scale
 
 
 # Parameters not calibrated:
-#  - steepness: numerical smoothing of the activation indicator, kept constant at
-#    the model's canonical value (tests/cases/chamber_sphere.json).
 #  - volume0, prestress: the unloaded reference volume and the resting passive
 #    stress are not identifiable from a single loaded P-V loop (a profile scan
 #    over volume0 is monotonic). They are instead read directly from the data:
 #    volume0 = minimum volume (ESV, so stretch >= 1 everywhere), prestress =
 #    minimum transmural pressure (the resting stress).
-STEEPNESS = 0.005
-NOT_CALIBRATED = ("volume0", "prestress", "steepness")
+# t_shift is held at 0 (contraction onset = end-diastole, where the cycle is
+# rolled to t=0); it is otherwise redundant with the rise/fall times tau_1, tau_2.
+NOT_CALIBRATED = ("volume0", "prestress", "t_shift")
 DATA_DERIVED = ("volume0", "prestress")
 FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 6
 
 
 def data_fixed(t, P, V):
-    """Pick volume0 and prestress directly from the data (plus constant steepness)."""
-    return {"volume0": float(V.min()), "prestress": float(P.min()),
-            "steepness": STEEPNESS}
+    """Pick volume0 and prestress directly from the data; t_shift = 0."""
+    return {"volume0": float(V.min()), "prestress": float(P.min()), "t_shift": 0.0}
 
 
 def _expand(theta_free, fixed):
@@ -182,10 +169,10 @@ def residual_free(theta_free, t, P, V, scale, fixed, b_f, b_t):
 def calibrate_cycle(t, P, V, b_f, b_t):
     fixed = data_fixed(t, P, V)
     # start guess (SI) for the 6 free params: guccione_C, gamma_sigma_max,
-    # alpha_max, alpha_min, tsys, tdias
-    theta0 = np.array([2.0e3, 2.0e4, 25.0, -25.0, 0.03, 0.32])
-    lb = np.array([0.0, 0.0, 1.0, -200.0, 0.0, 0.0])
-    ub = np.array([1e6, 1e7, 200.0, -1.0, 0.6, 0.9])
+    # tau_1, tau_2, m1, m2 (two-hill twitch; t_shift fixed at 0)
+    theta0 = np.array([2.0e3, 3.0e4, 0.08, 0.18, 8.0, 8.0])
+    lb = np.array([0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
+    ub = np.array([1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
     theta0 = np.clip(theta0, lb + 1e-12, ub - 1e-12)
 
     # residual scale ~ characteristic stress rate, keeps the cost well-scaled
@@ -199,7 +186,7 @@ def calibrate_cycle(t, P, V, b_f, b_t):
 
     full_x = _expand(res_free.x, fixed)
     tau_obs = reconstruct_tau(full_x, P, V, b_f, b_t)
-    tau_pred = integrate_tau(full_x, t, tau_obs[0])
+    tau_pred = model_tau(full_x, t)
     rms = np.sqrt(np.mean((tau_pred - tau_obs) ** 2))  # Pa
     tau_amp = np.ptp(tau_obs)
 
@@ -253,7 +240,7 @@ def main():
     print(f"wrote {out_csv} ({len(names)} cycles)")
 
     # structured summary: value distribution + identifiability per parameter
-    units = ["m^3", "Pa", "Pa", "Pa", "1/s", "1/s", "s", "s", "s"]
+    units = ["m^3", "Pa", "Pa", "Pa", "s", "s", "s", "-", "-"]
     print(f"\n{'parameter':<16}{'unit':>6}{'median':>13}{'p10':>13}{'p90':>13}"
           f"{'rel.SE':>10}{'%@bound':>9}")
     print("-" * 80)

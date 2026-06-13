@@ -24,8 +24,7 @@ def model_pressure(theta, t, P, V, b_f, b_t):
     volume0, C, _, prestress = theta[:4]
     stretch = (V / volume0) ** (1.0 / 3.0)
     passive = cy.passive_guccione(stretch, C, b_f, b_t) + prestress
-    tau_obs = cy.reconstruct_tau(theta, P, V, b_f, b_t)
-    tau_pred = cy.integrate_tau(theta, t, tau_obs[0])
+    tau_pred = cy.model_tau(theta, t)
     return (tau_pred + passive) / stretch  # Pa
 
 
