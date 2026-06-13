@@ -22,6 +22,7 @@ def forward_pv(path):
     theta, _, _, _, _ = cy.calibrate_cycle(t, P, V, b_f, b_t)
     names = cy.PARAM_NAMES
     vals = {names[i]: float(theta[i]) for i in range(len(names))}
+    vals.pop("n", None)  # the C++ block bakes in n = 1 (not an input parameter)
     vals["b_f"], vals["b_t"] = float(b_f), float(b_t)
 
     # net inflow that reproduces the volume trajectory: Q = dV/dt (Qout = 0)

@@ -36,7 +36,7 @@ OUT_DIR = os.path.expanduser("~/Downloads/simulations_data_yale")
 
 PARAM_NAMES = [
     "volume0", "guccione_C", "gamma_sigma_max", "prestress",
-    "t_shift", "tau_1", "tau_2", "m1", "m2",
+    "t_shift", "tau_1", "tau_2", "m1", "m2", "n",
 ]
 
 
@@ -115,9 +115,11 @@ def twohill(t, t_shift, tau_1, tau_2, m1, m2):
 
 def reconstruct_tau(theta, P, V, b_f, b_t):
     """Active stress tau reconstructed from (P, V) via residuals 0 and 1, with a
-    Guccione passive law (scaling C = theta[1], b parameters from the data)."""
+    Guccione passive law (scaling C = theta[1], b parameters from the data) and a
+    shape-correction factor n = theta[9] in the stretch (n = 1 is a sphere)."""
     volume0, C, _, prestress = theta[:4]
-    stretch = (V / volume0) ** (1.0 / 3.0)
+    n = theta[9]
+    stretch = (V / volume0) ** (1.0 / (3.0 * n))
     stress = P * stretch
     tau = stress - passive_guccione(stretch, C, b_f, b_t) - prestress
     return tau
@@ -141,16 +143,22 @@ def residual(theta, t, P, V, scale, b_f, b_t):
 #    over volume0 is monotonic). They are instead read directly from the data:
 #    volume0 = minimum volume (ESV, so stretch >= 1 everywhere), prestress =
 #    minimum transmural pressure (the resting stress).
-# t_shift is held at 0 (contraction onset = end-diastole, where the cycle is
-# rolled to t=0); it is otherwise redundant with the rise/fall times tau_1, tau_2.
-NOT_CALIBRATED = ("volume0", "prestress", "t_shift")
+# Held constant:
+#  - t_shift = 0: contraction onset = end-diastole (cycle rolled to t=0);
+#    otherwise redundant with the rise/fall times tau_1, tau_2.
+#  - n = 1 (sphere): the shape factor is NOT identifiable from a single loaded
+#    P-V loop -- the fit error decreases monotonically with n (see profile_n.py),
+#    so fitting it just flattens the geometry. Set a fixed value here instead.
+NOT_CALIBRATED = ("volume0", "prestress", "t_shift", "n")
 DATA_DERIVED = ("volume0", "prestress")
+N_SHAPE = 1.0
 FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 6
 
 
 def data_fixed(t, P, V):
-    """Pick volume0 and prestress directly from the data; t_shift = 0."""
-    return {"volume0": float(V.min()), "prestress": float(P.min()), "t_shift": 0.0}
+    """Pick volume0 and prestress directly from the data; t_shift = 0, n fixed."""
+    return {"volume0": float(V.min()), "prestress": float(P.min()),
+            "t_shift": 0.0, "n": N_SHAPE}
 
 
 def _expand(theta_free, fixed):
@@ -169,7 +177,7 @@ def residual_free(theta_free, t, P, V, scale, fixed, b_f, b_t):
 def calibrate_cycle(t, P, V, b_f, b_t):
     fixed = data_fixed(t, P, V)
     # start guess (SI) for the 6 free params: guccione_C, gamma_sigma_max,
-    # tau_1, tau_2, m1, m2 (two-hill twitch; t_shift fixed at 0)
+    # tau_1, tau_2, m1, m2 (two-hill twitch; t_shift and n fixed)
     theta0 = np.array([2.0e3, 3.0e4, 0.08, 0.18, 8.0, 8.0])
     lb = np.array([0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
     ub = np.array([1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
@@ -240,7 +248,7 @@ def main():
     print(f"wrote {out_csv} ({len(names)} cycles)")
 
     # structured summary: value distribution + identifiability per parameter
-    units = ["m^3", "Pa", "Pa", "Pa", "s", "s", "s", "-", "-"]
+    units = ["m^3", "Pa", "Pa", "Pa", "s", "s", "s", "-", "-", "-"]
     print(f"\n{'parameter':<16}{'unit':>6}{'median':>13}{'p10':>13}{'p90':>13}"
           f"{'rel.SE':>10}{'%@bound':>9}")
     print("-" * 80)
