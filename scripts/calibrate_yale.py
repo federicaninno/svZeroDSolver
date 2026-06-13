@@ -35,9 +35,39 @@ DATA_DIR = os.path.expanduser("~/Downloads/simulations_data_yale/simulations_yal
 OUT_DIR = os.path.expanduser("~/Downloads/simulations_data_yale")
 
 PARAM_NAMES = [
-    "volume0", "gamma_W1", "gamma_sigma_max", "prestress",
+    "volume0", "guccione_C", "gamma_sigma_max", "prestress",
     "alpha_max", "alpha_min", "tsys", "tdias", "steepness",
 ]
+
+
+def read_b(cav_path):
+    """Read the Guccione exponential parameters b_f, b_t from the cycle's
+    parameters.par (b_fs only multiplies shear terms, which vanish for the
+    equibiaxial spherical deformation, so it is not needed)."""
+    import re
+    par = os.path.join(os.path.dirname(cav_path), "parameters.par")
+    txt = open(par).read()
+    b_f = float(re.search(r"b_f=([0-9.eE+-]+)", txt).group(1))
+    b_t = float(re.search(r"b_t=([0-9.eE+-]+)", txt).group(1))
+    return b_f, b_t
+
+
+def passive_guccione(lam, C, b_f, b_t):
+    """Passive spherical wall stress for a thin-walled incompressible sphere with
+    a Guccione strain-energy W = (C/2)(exp(Q) - 1).
+
+    Equibiaxial in-plane stretch lam (fiber f and sheet s, both tangential) and
+    radial stretch lam^-2 (normal n). With Green-Lagrange strains
+    E_p = (lam^2 - 1)/2 (in-plane) and E_r = (lam^-4 - 1)/2 (radial) and no shear,
+        Q = (b_f + b_t) E_p^2 + b_t E_r^2.
+    The mean in-plane Cauchy stress (with sigma_radial = 0 for the thin wall) is
+        S = C exp(Q) [ (b_f + b_t)/2 lam^2 E_p - b_t lam^-4 E_r ].
+    Only the scaling C is fitted; b_f, b_t come from the data."""
+    Ep = 0.5 * (lam ** 2 - 1.0)
+    Er = 0.5 * (lam ** (-4) - 1.0)
+    Q = (b_f + b_t) * Ep ** 2 + b_t * Er ** 2
+    return C * np.exp(Q) * (
+        0.5 * (b_f + b_t) * lam ** 2 * Ep - b_t * lam ** (-4) * Er)
 
 
 def load_cycle(path):
@@ -81,13 +111,13 @@ def activation(t, alpha_max, alpha_min, tsys, tdias, steepness):
     return np.abs(act_t), np.maximum(act_t, 0.0)
 
 
-def reconstruct_tau(theta, P, V):
-    """Active stress tau reconstructed from (P, V) via residuals 0 and 1."""
-    volume0, gamma_W1, _, prestress = theta[:4]
+def reconstruct_tau(theta, P, V, b_f, b_t):
+    """Active stress tau reconstructed from (P, V) via residuals 0 and 1, with a
+    Guccione passive law (scaling C = theta[1], b parameters from the data)."""
+    volume0, C, _, prestress = theta[:4]
     stretch = (V / volume0) ** (1.0 / 3.0)
-    CG = stretch ** 2
     stress = P * stretch
-    tau = stress - 4.0 * gamma_W1 * (1.0 - CG ** (-3)) - prestress
+    tau = stress - passive_guccione(stretch, C, b_f, b_t) - prestress
     return tau
 
 
@@ -108,82 +138,77 @@ def integrate_tau(theta, t, tau0):
     return tau
 
 
-def residual(theta, t, P, V, scale):
+def residual(theta, t, P, V, scale, b_f, b_t):
     # tau reconstructed from the data (depends on the material parameters) ...
-    tau_obs = reconstruct_tau(theta, P, V)
+    tau_obs = reconstruct_tau(theta, P, V, b_f, b_t)
     # ... must be consistent with the active-stress ODE (activation parameters).
     tau_pred = integrate_tau(theta, t, tau_obs[0])
     return (tau_pred - tau_obs) / scale
 
 
-# Parameters held constant (not calibrated):
-#  - steepness: numerical smoothing of the activation indicator, kept at the
-#    model's canonical value (tests/cases/chamber_sphere.json).
-#  - prestress: an additive offset in the passive stress that is confounded with
-#    volume0. Setting it to zero anchors the passive stress to vanish at the
-#    unloaded volume, which makes volume0 identifiable.
-FIXED = {"steepness": 0.005, "prestress": 0.0}
-FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in FIXED]  # 7 free params
+# Parameters not calibrated:
+#  - steepness: numerical smoothing of the activation indicator, kept constant at
+#    the model's canonical value (tests/cases/chamber_sphere.json).
+#  - volume0, prestress: the unloaded reference volume and the resting passive
+#    stress are not identifiable from a single loaded P-V loop (a profile scan
+#    over volume0 is monotonic). They are instead read directly from the data:
+#    volume0 = minimum volume (ESV, so stretch >= 1 everywhere), prestress =
+#    minimum transmural pressure (the resting stress).
+STEEPNESS = 0.005
+NOT_CALIBRATED = ("volume0", "prestress", "steepness")
+DATA_DERIVED = ("volume0", "prestress")
+FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 6
 
 
-def _expand(theta_free):
-    """Insert the fixed parameters back into a full 9-parameter vector."""
+def data_fixed(t, P, V):
+    """Pick volume0 and prestress directly from the data (plus constant steepness)."""
+    return {"volume0": float(V.min()), "prestress": float(P.min()),
+            "steepness": STEEPNESS}
+
+
+def _expand(theta_free, fixed):
+    """Build the full 9-parameter vector from the free params and the fixed ones."""
     theta = np.empty(len(PARAM_NAMES))
     theta[FREE] = theta_free
-    for nm, val in FIXED.items():
+    for nm, val in fixed.items():
         theta[PARAM_NAMES.index(nm)] = val
     return theta
 
 
-def residual_free(theta_free, t, P, V, scale):
-    return residual(_expand(theta_free), t, P, V, scale)
+def residual_free(theta_free, t, P, V, scale, fixed, b_f, b_t):
+    return residual(_expand(theta_free, fixed), t, P, V, scale, b_f, b_t)
 
 
-def calibrate_cycle(t, P, V):
-    Vmin = V.min()
-    # physiologically-motivated start guess (SI), full 9-vector
-    theta0_full = np.array([
-        0.6 * Vmin,    # volume0 (unloaded < ESV)
-        2.0e3,         # gamma_W1
-        2.0e4,         # gamma_sigma_max
-        FIXED["prestress"],
-        25.0,          # alpha_max
-        -25.0,         # alpha_min
-        0.03,          # tsys (just after EDV)
-        0.32,          # tdias
-        FIXED["steepness"],
-    ])
-    lb_full = np.array([1e-6, 0.0, 0.0, -1e4, 1.0, -200.0, 0.0, 0.0, 5e-3])
-    ub_full = np.array([0.99 * Vmin, 1e6, 1e7, 1e4, 200.0, -1.0, 0.6, 0.9, 0.3])
-    theta0_full = np.clip(theta0_full, lb_full + 1e-12, ub_full - 1e-12)
-
-    # the fixed parameters are held constant: optimize only the free ones
-    theta0, lb, ub = theta0_full[FREE], lb_full[FREE], ub_full[FREE]
+def calibrate_cycle(t, P, V, b_f, b_t):
+    fixed = data_fixed(t, P, V)
+    # start guess (SI) for the 6 free params: guccione_C, gamma_sigma_max,
+    # alpha_max, alpha_min, tsys, tdias
+    theta0 = np.array([2.0e3, 2.0e4, 25.0, -25.0, 0.03, 0.32])
+    lb = np.array([0.0, 0.0, 1.0, -200.0, 0.0, 0.0])
+    ub = np.array([1e6, 1e7, 200.0, -1.0, 0.6, 0.9])
+    theta0 = np.clip(theta0, lb + 1e-12, ub - 1e-12)
 
     # residual scale ~ characteristic stress rate, keeps the cost well-scaled
     scale = max(np.max(np.abs(P)) * 1.0, 1.0e3)
 
     res_free = least_squares(
-        residual_free, theta0, args=(t, P, V, scale), bounds=(lb, ub),
-        method="trf", x_scale="jac", max_nfev=2000, ftol=1e-12, xtol=1e-12,
+        residual_free, theta0, args=(t, P, V, scale, fixed, b_f, b_t),
+        bounds=(lb, ub), method="trf", x_scale="jac", max_nfev=2000,
+        ftol=1e-12, xtol=1e-12,
     )
 
-    class _R:  # adapt the 8-free result to the rest of the function (full 9-vector)
-        pass
-    res = _R()
-    res.x = _expand(res_free.x)
-    res.jac = res_free.jac
-    res.cost = res_free.cost
-    tau_obs = reconstruct_tau(res.x, P, V)
-    tau_pred = integrate_tau(res.x, t, tau_obs[0])
+    full_x = _expand(res_free.x, fixed)
+    tau_obs = reconstruct_tau(full_x, P, V, b_f, b_t)
+    tau_pred = integrate_tau(full_x, t, tau_obs[0])
     rms = np.sqrt(np.mean((tau_pred - tau_obs) ** 2))  # Pa
     tau_amp = np.ptp(tau_obs)
 
     # Per-parameter relative standard error from the Jacobian covariance, a
     # local identifiability measure (large -> the data does not constrain that
     # parameter). A parameter pinned at a bound is flagged separately. These are
-    # computed for the 8 free parameters and scattered back into a 9-vector;
-    # the fixed steepness gets NaN (not calibrated).
+    # computed for the free parameters and scattered back into a 9-vector;
+    # the not-calibrated parameters get NaN.
+    res = res_free
     m, n = res.jac.shape
     dof = max(m - n, 1)
     cov = np.linalg.pinv(res.jac.T @ res.jac) * (2.0 * res.cost / dof)
@@ -193,7 +218,7 @@ def calibrate_cycle(t, P, V):
     at_bound = np.zeros(len(PARAM_NAMES), bool)
     at_bound[FREE] = (res_free.x <= lb + 1e-6 * (ub - lb)) | (
         res_free.x >= ub - 1e-6 * (ub - lb))
-    return res.x, rms, tau_amp, rel_se, at_bound
+    return full_x, rms, tau_amp, rel_se, at_bound
 
 
 def main():
@@ -204,7 +229,8 @@ def main():
         name = os.path.basename(os.path.dirname(path))
         try:
             t, P, V = load_cycle(path)
-            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(t, P, V)
+            b_f, b_t = read_b(path)
+            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(t, P, V, b_f, b_t)
             names.append(name); thetas.append(theta); rmss.append(rms)
             amps.append(tau_amp); relses.append(rel_se); bounds.append(at_bound)
         except Exception as e:
@@ -233,7 +259,12 @@ def main():
     print("-" * 80)
     for i, nm in enumerate(PARAM_NAMES):
         col = thetas[:, i]
-        if nm in FIXED:
+        if nm in DATA_DERIVED:
+            print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
+                  f"{np.percentile(col,10):>13.4g}{np.percentile(col,90):>13.4g}"
+                  f"{'-':>10}{'-':>9}  from data")
+            continue
+        if nm not in [PARAM_NAMES[k] for k in FREE]:
             print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
                   f"{'-':>13}{'-':>13}{'-':>10}{'-':>9}  fixed")
             continue

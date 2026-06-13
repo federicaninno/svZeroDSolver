@@ -2,7 +2,7 @@
 
 The fitted loop is the model pressure at each observed volume,
     P_model(t) = (tau_pred(t) + passive(V)) / stretch(V),
-where passive = 4*gamma_W1*(1 - CG^-3) + prestress and tau_pred is the active
+where passive is the Guccione spherical wall stress + prestress and tau_pred is the active
 stress from integrating the calibrated activation ODE. The data loop is the raw
 (V, P). Their gap is the active-stress fit error propagated into pressure.
 """
@@ -20,12 +20,11 @@ OUT = cy.OUT_DIR
 MMHG = cy.MMHG_TO_PA
 
 
-def model_pressure(theta, t, P, V):
-    volume0, gamma_W1, _, prestress = theta[:4]
+def model_pressure(theta, t, P, V, b_f, b_t):
+    volume0, C, _, prestress = theta[:4]
     stretch = (V / volume0) ** (1.0 / 3.0)
-    CG = stretch ** 2
-    passive = 4.0 * gamma_W1 * (1.0 - CG ** (-3)) + prestress
-    tau_obs = cy.reconstruct_tau(theta, P, V)
+    passive = cy.passive_guccione(stretch, C, b_f, b_t) + prestress
+    tau_obs = cy.reconstruct_tau(theta, P, V, b_f, b_t)
     tau_pred = cy.integrate_tau(theta, t, tau_obs[0])
     return (tau_pred + passive) / stretch  # Pa
 
@@ -38,8 +37,9 @@ def main():
         name = os.path.basename(os.path.dirname(path))
         try:
             t, P, V = cy.load_cycle(path)
-            theta, rms, amp, _, _ = cy.calibrate_cycle(t, P, V)
-            Pm = model_pressure(theta, t, P, V)
+            b_f, b_t = cy.read_b(path)
+            theta, rms, amp, _, _ = cy.calibrate_cycle(t, P, V, b_f, b_t)
+            Pm = model_pressure(theta, t, P, V, b_f, b_t)
             results.append((int(name.split("_")[1]), V * 1e6, P / MMHG, Pm / MMHG,
                             rms / max(amp, 1.0)))
         except Exception as e:

@@ -14,8 +14,9 @@ OUT = cy.OUT_DIR
 def example_figure(cycle="cycle_0"):
     path = os.path.join(cy.DATA_DIR, cycle, "cav.LV.csv")
     t, P, V = cy.load_cycle(path)
-    theta, rms, amp, rel_se, at_bound = cy.calibrate_cycle(t, P, V)
-    tau_obs = cy.reconstruct_tau(theta, P, V)
+    b_f, b_t = cy.read_b(path)
+    theta, rms, amp, rel_se, at_bound = cy.calibrate_cycle(t, P, V, b_f, b_t)
+    tau_obs = cy.reconstruct_tau(theta, P, V, b_f, b_t)
     tau_pred = cy.integrate_tau(theta, t, tau_obs[0])
     act, act_plus = cy.activation(t, *theta[4:9])
 
