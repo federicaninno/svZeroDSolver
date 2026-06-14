@@ -40,8 +40,9 @@ def main():
             theta, rms, amp, _, _ = cy.calibrate_cycle(
                 t, P, V, b_f, b_t, *cy.estimate_passive(path, b_f, b_t))
             Pm = model_pressure(theta, t, P, V, b_f, b_t)
+            Pl, Vl = cy.read_load_phase(path)  # passive-fit data (load phase)
             results.append((int(name.split("_")[1]), V * 1e6, P / MMHG, Pm / MMHG,
-                            rms / max(amp, 1.0)))
+                            rms / max(amp, 1.0), Vl * 1e6, Pl / MMHG))
         except Exception as e:
             print(f"  {name}: {e}")
     print(f"plotting {len(results)} loops")
@@ -50,20 +51,23 @@ def main():
     fig, axes = plt.subplots(nrow, ncol, figsize=(26, 24))
     for ax in axes.flat:
         ax.axis("off")
-    for ax, (cyc, V, Pd, Pm, err) in zip(axes.flat, results):
+    for ax, (cyc, V, Pd, Pm, err, Vl, Pl) in zip(axes.flat, results):
         ax.axis("on")
-        ax.plot(V, Pd, color="#222", lw=1.4)
-        ax.plot(V, Pm, color="#d83", lw=1.2, ls="--")
+        ax.plot(V, Pd, color="#222", lw=1.4)            # cardiac cycle (active fit)
+        ax.plot(V, Pm, color="#d83", lw=1.2, ls="--")   # 0D forward fit
+        ax.plot(Vl, Pl, color="#37a", lw=1.8)           # load phase (passive fit)
         ax.set_title(f"cycle_{cyc}  ({err*100:.1f}%)", fontsize=8, pad=2)
         ax.set_xticks([]); ax.set_yticks([])
         for s in ax.spines.values():
             s.set_linewidth(0.4)
 
-    fig.legend(handles=[Line2D([], [], color="#222", lw=1.6, label="data"),
-                        Line2D([], [], color="#d83", lw=1.6, ls="--", label="fitted ChamberSphere")],
-               loc="upper center", ncol=2, fontsize=14, frameon=False,
-               bbox_to_anchor=(0.5, 0.997))
-    fig.suptitle("All 124 LV pressure-volume loops: data vs fitted ChamberSphere "
+    fig.legend(handles=[
+        Line2D([], [], color="#222", lw=1.8, label="cardiac cycle  (drives ACTIVE fit: tau twitch)"),
+        Line2D([], [], color="#d83", lw=1.8, ls="--", label="0D forward fit"),
+        Line2D([], [], color="#37a", lw=2.2, label="load phase  (drives PASSIVE fit: volume0, guccione_C)")],
+        loc="upper center", ncol=3, fontsize=13, frameon=False,
+        bbox_to_anchor=(0.5, 0.997))
+    fig.suptitle("All 124 LV P-V loops: which data drives each fit "
                  "(x = volume [mL], y = pressure [mmHg]; % = active-stress fit error)",
                  fontsize=15, y=0.985)
     fig.tight_layout(rect=[0, 0, 1, 0.965])
