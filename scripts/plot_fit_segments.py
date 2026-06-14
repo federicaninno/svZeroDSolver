@@ -28,7 +28,7 @@ def main():
     fig, ax = plt.subplots(2, 1, figsize=(13, 6.5), sharex=True)
     for a, y, lab in [(ax[0], P, "pressure [mmHg]"), (ax[1], V, "volume [mL]")]:
         a.plot(t, y, color="#222", lw=1.0)
-        a.axvspan(t.min(), 0, color="#9c6", alpha=0.5)               # load phase
+        a.axvspan(t.min(), 0, color="#ccc", alpha=0.5)               # load phase (unused)
         a.axvspan(0, last0, color="#ddd", alpha=0.7)                 # init beats
         a.axvspan(last0, tmax, color="#f0a64a", alpha=0.5)           # last beat
         a.set_ylabel(lab, fontsize=10)
@@ -39,15 +39,14 @@ def main():
     ax[1].axvline(ted, color="r", ls=":", lw=1.2)
     ax[1].text(ted, V.max(), " EDV (roll to t=0)", color="r", fontsize=8, va="top")
 
-    ax[0].text(t.min() + 5, P.max() * 0.7,
-               "LOAD PHASE (t<0)\npassive inflation\n-> volume0, guccione_C",
-               fontsize=9, color="#3a5", weight="bold")
+    ax[0].text(t.min() + 5, P.max() * 0.55,
+               "load phase\n(not used)", fontsize=9, color="#777")
     ax[0].text(last0 - 1950, P.max() * 0.7,
                "init beats\n(not used)", fontsize=9, color="#777", ha="left")
-    ax[0].text(last0 + 30, P.max() * 0.7,
-               "LAST CARDIAC CYCLE\n-> active twitch\n(gamma_sigma_max,\n tau_1, tau_2, m1, m2)",
+    ax[0].text(last0 + 30, P.max() * 0.62,
+               "LAST CARDIAC CYCLE\n-> ALL parameters\n(volume0, guccione_C,\n gamma_sigma_max,\n tau_1, tau_2, m1, m2)",
                fontsize=9, color="#a60", weight="bold")
-    ax[0].set_title("Which data segment feeds which fit", fontsize=13)
+    ax[0].set_title("Which data feeds the fit: only the last cardiac cycle", fontsize=13)
     fig.tight_layout()
     out = os.path.join(cy.OUT_DIR, "viz_fit_segments.png")
     fig.savefig(out, dpi=120); print("wrote", out)

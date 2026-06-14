@@ -184,33 +184,25 @@ def residual(theta, t, P, V, scale, b_f, b_t):
     return (model_tau(theta, t) - tau_obs) / scale
 
 
-# Parameters not calibrated:
-#  - volume0, prestress: the unloaded reference volume and the resting passive
-#    stress are not identifiable from a single loaded P-V loop (a profile scan
-#    over volume0 is monotonic). They are instead read directly from the data:
-#    volume0 = minimum volume (ESV, so stretch >= 1 everywhere), prestress =
-#    minimum transmural pressure (the resting stress).
-# Two-stage calibration. Stage 1 (estimate_passive) fixes the passive parameters:
-#  - volume0, guccione_C: the unloaded volume and Guccione scaling, fit to the
-#    load-phase EDPVR (pure passive). volume0 is afterload-independent, so
-#    guccione_C tracks the true material a and is decoupled from afterload.
+# Single joint fit of all seven free parameters (volume0, guccione_C,
+# gamma_sigma_max, tau_1, tau_2, m1, m2) from the full cardiac cycle. With
+# prestress = 0 (the correct unloaded value), the prestress-volume0 tradeoff is
+# removed and the requirement that the reconstructed tau be a single clean twitch
+# over the whole cycle (~0 in diastole, smooth hump in systole) makes volume0
+# identifiable -- it no longer rails to ESV. Held constant:
 #  - prestress = 0: the unloaded state has zero transmural pressure -> zero stress.
 #  - t_shift = 0: contraction onset = end-diastole (cycle rolled to t=0);
 #    otherwise redundant with the rise/fall times tau_1, tau_2.
 #  - n = 1 (sphere): NOT identifiable from a loaded loop (see profile_n.py).
-# Stage 2 fits only the active parameters from the cardiac cycle.
-NOT_CALIBRATED = ("volume0", "guccione_C", "prestress", "t_shift", "n")
-FROM_LOAD = ("volume0", "guccione_C")  # estimated from the passive load phase
-DATA_DERIVED = FROM_LOAD  # (label used by the plotting scripts)
+NOT_CALIBRATED = ("prestress", "t_shift", "n")
+DATA_DERIVED = ()  # nothing read directly from the data (label used by plots)
 N_SHAPE = 1.0
-FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 5
+FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 7
 
 
-def data_fixed(t, P, V, volume0, guccione_C):
-    """Fixed parameters: volume0 and guccione_C (from stage 1), prestress = 0,
-    t_shift = 0, n = 1."""
-    return {"volume0": float(volume0), "guccione_C": float(guccione_C),
-            "prestress": 0.0, "t_shift": 0.0, "n": N_SHAPE}
+def data_fixed(t, P, V):
+    """Fixed parameters: prestress = 0, t_shift = 0, n = 1."""
+    return {"prestress": 0.0, "t_shift": 0.0, "n": N_SHAPE}
 
 
 def _expand(theta_free, fixed):
@@ -226,14 +218,14 @@ def residual_free(theta_free, t, P, V, scale, fixed, b_f, b_t):
     return residual(_expand(theta_free, fixed), t, P, V, scale, b_f, b_t)
 
 
-def calibrate_cycle(t, P, V, b_f, b_t, volume0, guccione_C):
-    fixed = data_fixed(t, P, V, volume0, guccione_C)
-    # start guess (SI) for the 5 free active params: gamma_sigma_max,
-    # tau_1, tau_2, m1, m2 (two-hill twitch; volume0, guccione_C, prestress,
-    # t_shift and n fixed)
-    theta0 = np.array([3.0e4, 0.08, 0.18, 8.0, 8.0])
-    lb = np.array([0.0, 0.02, 0.05, 1.0, 1.0])
-    ub = np.array([1e7, 0.4, 0.6, 40.0, 40.0])
+def calibrate_cycle(t, P, V, b_f, b_t):
+    fixed = data_fixed(t, P, V)
+    # start guess (SI) for the 7 free params: volume0, guccione_C,
+    # gamma_sigma_max, tau_1, tau_2, m1, m2 (prestress, t_shift, n fixed)
+    Vmax = V.max()
+    theta0 = np.array([0.9 * V.min(), 2.0e3, 3.0e4, 0.08, 0.18, 8.0, 8.0])
+    lb = np.array([4.0e-5, 0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
+    ub = np.array([0.99 * Vmax, 1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
     theta0 = np.clip(theta0, lb + 1e-12, ub - 1e-12)
 
     # residual scale ~ characteristic stress rate, keeps the cost well-scaled
@@ -278,9 +270,7 @@ def main():
         try:
             t, P, V = load_cycle(path)
             b_f, b_t = read_b(path)
-            volume0, guccione_C = estimate_passive(path, b_f, b_t)  # stage 1
-            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(
-                t, P, V, b_f, b_t, volume0, guccione_C)            # stage 2
+            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(t, P, V, b_f, b_t)
             names.append(name); thetas.append(theta); rmss.append(rms)
             amps.append(tau_amp); relses.append(rel_se); bounds.append(at_bound)
         except Exception as e:
@@ -309,11 +299,6 @@ def main():
     print("-" * 80)
     for i, nm in enumerate(PARAM_NAMES):
         col = thetas[:, i]
-        if nm in FROM_LOAD:
-            print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
-                  f"{np.percentile(col,10):>13.4g}{np.percentile(col,90):>13.4g}"
-                  f"{'-':>10}{'-':>9}  from load")
-            continue
         if nm not in [PARAM_NAMES[k] for k in FREE]:
             print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
                   f"{'-':>13}{'-':>13}{'-':>10}{'-':>9}  fixed")

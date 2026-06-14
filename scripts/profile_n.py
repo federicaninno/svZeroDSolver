@@ -13,15 +13,13 @@ FREE_IDX = [1, 2, 5, 6, 7, 8]  # guccione_C, gamma_sigma_max, tau_1, tau_2, m1, 
 
 
 def fit_fixed_n(t, P, V, b_f, b_t, n_val, volume0):
-    # guccione_C is fit freely here (overridden in expand), so the dummy passed
-    # to data_fixed is irrelevant; prestress comes from data_fixed.
-    fixed = cy.data_fixed(t, P, V, volume0, 0.0)
+    # guccione_C is fit freely here (in FREE_IDX); volume0 supplied, prestress = 0.
     scale = max(np.max(np.abs(P)), 1e3)
 
     def expand(xf):
         th = np.empty(len(cy.PARAM_NAMES))
         th[FREE_IDX] = xf
-        th[0] = fixed["volume0"]; th[3] = fixed["prestress"]
+        th[0] = volume0; th[3] = 0.0
         th[4] = 0.0; th[9] = n_val
         return th
 
