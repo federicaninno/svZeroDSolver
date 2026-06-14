@@ -12,8 +12,8 @@ import calibrate_yale as cy
 FREE_IDX = [1, 2, 5, 6, 7, 8]  # guccione_C, gamma_sigma_max, tau_1, tau_2, m1, m2
 
 
-def fit_fixed_n(t, P, V, b_f, b_t, n_val):
-    fixed = cy.data_fixed(t, P, V)
+def fit_fixed_n(t, P, V, b_f, b_t, n_val, volume0):
+    fixed = cy.data_fixed(t, P, V, volume0)
     scale = max(np.max(np.abs(P)), 1e3)
 
     def expand(xf):
@@ -40,13 +40,13 @@ def fit_fixed_n(t, P, V, b_f, b_t, n_val):
 
 def main():
     paths = sorted(glob.glob(os.path.join(cy.DATA_DIR, "*", "cav.LV.csv")))
-    data = [(cy.load_cycle(p), cy.read_b(p)) for p in paths]
+    data = [(cy.load_cycle(p), cy.read_b(p), cy.read_unloaded(p)) for p in paths]
     print(f"{'n':>6}  {'median fit err':>15}  {'p90':>8}")
     for n_val in [1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 8.0, 12.0]:
         errs = []
-        for (t, P, V), (b_f, b_t) in data:
+        for (t, P, V), (b_f, b_t), vol0 in data:
             try:
-                errs.append(fit_fixed_n(t, P, V, b_f, b_t, n_val))
+                errs.append(fit_fixed_n(t, P, V, b_f, b_t, n_val, vol0))
             except Exception:
                 pass
         errs = np.array(errs)

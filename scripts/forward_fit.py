@@ -60,11 +60,12 @@ def base_vals(theta_free, fixed, b_f, b_t):
 def fit_cycle(path):
     t, P, V = cy.load_cycle(path)
     b_f, b_t = cy.read_b(path)
+    volume0 = cy.read_unloaded(path)
     dVdt = np.gradient(V, t, edge_order=2)
-    fixed = cy.data_fixed(t, P, V)
+    fixed = cy.data_fixed(t, P, V, volume0)
 
     # warm start from the reconstruction fit
-    theta0_full, *_ = cy.calibrate_cycle(t, P, V, b_f, b_t)
+    theta0_full, *_ = cy.calibrate_cycle(t, P, V, b_f, b_t, volume0)
     x0 = np.array([theta0_full[cy.PARAM_NAMES.index(n)] for n in FREE_NAMES])
     scale = max(P.max() - P.min(), 1e3)
 
@@ -87,7 +88,7 @@ def cold_start_check(path):
     t, P, V = cy.load_cycle(path)
     b_f, b_t = cy.read_b(path)
     dVdt = np.gradient(V, t, edge_order=2)
-    fixed = cy.data_fixed(t, P, V)
+    fixed = cy.data_fixed(t, P, V, cy.read_unloaded(path))
     scale = max(P.max() - P.min(), 1e3)
 
     def resid(x):

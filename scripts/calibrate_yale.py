@@ -40,6 +40,17 @@ PARAM_NAMES = [
 ]
 
 
+def read_unloaded(cav_path):
+    """Unloaded LV cavity volume (m^3): the volume at zero transmural pressure,
+    i.e. the first row of cav.LV.csv (the 'load' phase starts from the unloaded
+    mesh at P = 0). This is the physically-correct, afterload-independent stretch
+    reference volume0 -- unlike the end-systolic volume, which varies with load."""
+    with open(cav_path) as fh:
+        fh.readline()  # header
+        fh.readline()  # units
+        return float(fh.readline().split(",")[2]) * ML_TO_M3
+
+
 def read_b(cav_path):
     """Read the Guccione exponential parameters b_f, b_t from the cycle's
     parameters.par (b_fs only multiplies shear terms, which vanish for the
@@ -144,6 +155,10 @@ def residual(theta, t, P, V, scale, b_f, b_t):
 #    volume0 = minimum volume (ESV, so stretch >= 1 everywhere), prestress =
 #    minimum transmural pressure (the resting stress).
 # Held constant:
+#  - volume0: the unloaded cavity volume (read_unloaded), an afterload-independent
+#    geometric reference. Using it (instead of the end-systolic volume) decouples
+#    the fitted guccione_C from afterload and lets it track the true material a.
+#  - prestress = P_min: the resting passive stress.
 #  - t_shift = 0: contraction onset = end-diastole (cycle rolled to t=0);
 #    otherwise redundant with the rise/fall times tau_1, tau_2.
 #  - n = 1 (sphere): the shape factor is NOT identifiable from a single loaded
@@ -155,9 +170,10 @@ N_SHAPE = 1.0
 FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 6
 
 
-def data_fixed(t, P, V):
-    """Pick volume0 and prestress directly from the data; t_shift = 0, n fixed."""
-    return {"volume0": float(V.min()), "prestress": float(P.min()),
+def data_fixed(t, P, V, volume0):
+    """Fixed parameters: volume0 (unloaded, passed in), prestress = P_min,
+    t_shift = 0, n = 1."""
+    return {"volume0": float(volume0), "prestress": float(P.min()),
             "t_shift": 0.0, "n": N_SHAPE}
 
 
@@ -174,8 +190,8 @@ def residual_free(theta_free, t, P, V, scale, fixed, b_f, b_t):
     return residual(_expand(theta_free, fixed), t, P, V, scale, b_f, b_t)
 
 
-def calibrate_cycle(t, P, V, b_f, b_t):
-    fixed = data_fixed(t, P, V)
+def calibrate_cycle(t, P, V, b_f, b_t, volume0):
+    fixed = data_fixed(t, P, V, volume0)
     # start guess (SI) for the 6 free params: guccione_C, gamma_sigma_max,
     # tau_1, tau_2, m1, m2 (two-hill twitch; t_shift and n fixed)
     theta0 = np.array([2.0e3, 3.0e4, 0.08, 0.18, 8.0, 8.0])
@@ -225,7 +241,8 @@ def main():
         try:
             t, P, V = load_cycle(path)
             b_f, b_t = read_b(path)
-            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(t, P, V, b_f, b_t)
+            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(
+                t, P, V, b_f, b_t, read_unloaded(path))
             names.append(name); thetas.append(theta); rmss.append(rms)
             amps.append(tau_amp); relses.append(rel_se); bounds.append(at_bound)
         except Exception as e:

@@ -15,7 +15,8 @@ def example_figure(cycle="cycle_0"):
     path = os.path.join(cy.DATA_DIR, cycle, "cav.LV.csv")
     t, P, V = cy.load_cycle(path)
     b_f, b_t = cy.read_b(path)
-    theta, rms, amp, rel_se, at_bound = cy.calibrate_cycle(t, P, V, b_f, b_t)
+    theta, rms, amp, rel_se, at_bound = cy.calibrate_cycle(
+        t, P, V, b_f, b_t, cy.read_unloaded(path))
     tau_obs = cy.reconstruct_tau(theta, P, V, b_f, b_t)
     tau_pred = cy.model_tau(theta, t)
     # model pressure at the observed volume (Python forward model)
