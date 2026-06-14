@@ -24,8 +24,8 @@ RESULTS = os.path.join(BASE, "chamber_sphere_calibration_results.csv")
 IN_LABELS = ["a_ventricles", "EDP_lv", "Rsys"]
 IN_NICE = ["contractility\n(a_ventricles)", "preload\n(EDP_lv)", "afterload\n(Rsys)"]
 # fitted parameters to relate (drop alpha_max: railed constant; steepness: fixed)
-FIT_KEYS = ["volume0", "guccione_C", "gamma_sigma_max", "prestress",
-            "tau_1", "tau_2", "m1"]
+FIT_KEYS = ["volume0", "guccione_C", "gamma_sigma_max",
+            "tau_1", "tau_2", "m1", "m2"]
 
 
 def load():

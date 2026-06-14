@@ -10,9 +10,9 @@ import matplotlib.pyplot as plt
 BASE = os.path.expanduser("~/Downloads/simulations_data_yale")
 X = np.loadtxt(os.path.join(BASE, "data", "X.txt"))  # [125,3]: a_ventricles, EDP_lv, Rsys
 IN_NAMES = ["a_ventricles", "EDP_lv", "Rsys"]
-FIT_KEYS = ["guccione_C", "gamma_sigma_max", "prestress", "volume0",
+FIT_KEYS = ["guccione_C", "gamma_sigma_max", "volume0",
             "tau_1", "tau_2", "m1", "m2"]
-UNITS = {"guccione_C": "Pa", "gamma_sigma_max": "Pa", "prestress": "Pa",
+UNITS = {"guccione_C": "Pa", "gamma_sigma_max": "Pa",
          "volume0": "mL", "tau_1": "s", "tau_2": "s", "m1": "-", "m2": "-"}
 
 

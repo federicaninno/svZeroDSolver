@@ -15,6 +15,7 @@ import numpy as np
 from scipy.optimize import least_squares
 
 import calibrate_yale as cy
+import diagnose_tradeoff as dt
 
 X = np.loadtxt(os.path.expanduser(
     "~/Downloads/simulations_data_yale/data/X.txt"))  # a_ventricles, EDP_lv, Rsys
@@ -73,8 +74,7 @@ def main():
         v0_fit.append(v0); C_load.append(C); rms.append(e)
         v0_row.append(cy.read_unloaded(p))
         t, P, V = cy.load_cycle(p)
-        th, *_ = cy.calibrate_cycle(t, P, V, b_f, b_t, v0)  # cardiac fit using this v0
-        C_card.append(th[1])
+        C_card.append(dt.fit(t, P, V, b_f, b_t, v0, 0.0)[0])  # free cardiac guccione_C fit
     v0_fit = np.array(v0_fit); C_load = np.array(C_load); rms = np.array(rms)
     v0_row = np.array(v0_row); C_card = np.array(C_card)
 

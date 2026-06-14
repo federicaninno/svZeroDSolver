@@ -51,6 +51,42 @@ def read_unloaded(cav_path):
         return float(fh.readline().split(",")[2]) * ML_TO_M3
 
 
+def read_load_phase(cav_path):
+    """Load-phase (P, V) in SI: rows with t < 0 (passive inflation from the
+    unloaded mesh, P rising from 0)."""
+    P, V = [], []
+    with open(cav_path) as fh:
+        fh.readline(); fh.readline()
+        for line in fh:
+            q = line.split(",")
+            try:
+                if float(q[0]) < 0:
+                    P.append(float(q[1])); V.append(float(q[2]))
+            except (ValueError, IndexError):
+                pass
+    return np.array(P) * MMHG_TO_PA, np.array(V) * ML_TO_M3
+
+
+def estimate_passive(cav_path, b_f, b_t):
+    """Stage 1 (passive): estimate the unloaded volume volume0 and the Guccione
+    scaling guccione_C by fitting the Guccione law to the load-phase EDPVR (a pure
+    passive inflation; prestress = 0 at the unloaded state). This separates the
+    passive material (from the load phase) from the active contraction (fit from
+    the cardiac cycle), removing the passive-active confounding."""
+    Pl, Vl = read_load_phase(cav_path)
+    scale = max(Pl.max(), 1e2)
+
+    def resid(x):
+        stretch = (Vl / x[0]) ** (1.0 / 3.0)
+        return (passive_guccione(stretch, x[1], b_f, b_t) / stretch - Pl) / scale
+    lb = np.array([Vl.min() * 0.5, 0.0])
+    ub = np.array([Vl.min() * 1.001, 1e6])
+    x0 = np.clip([Vl.min() * 0.98, 1.0e3], lb + 1e-12, ub - 1e-12)
+    r = least_squares(resid, x0, bounds=(lb, ub), method="trf", x_scale="jac",
+                      max_nfev=2000, ftol=1e-12)
+    return float(r.x[0]), float(r.x[1])
+
+
 def read_b(cav_path):
     """Read the Guccione exponential parameters b_f, b_t from the cycle's
     parameters.par (b_fs only multiplies shear terms, which vanish for the
@@ -154,27 +190,27 @@ def residual(theta, t, P, V, scale, b_f, b_t):
 #    over volume0 is monotonic). They are instead read directly from the data:
 #    volume0 = minimum volume (ESV, so stretch >= 1 everywhere), prestress =
 #    minimum transmural pressure (the resting stress).
-# Held constant:
-#  - volume0: the unloaded cavity volume (read_unloaded), an afterload-independent
-#    geometric reference. Using it (instead of the end-systolic volume) decouples
-#    the fitted guccione_C from afterload and lets it track the true material a.
-#  - prestress = P_min: the resting passive stress.
+# Two-stage calibration. Stage 1 (estimate_passive) fixes the passive parameters:
+#  - volume0, guccione_C: the unloaded volume and Guccione scaling, fit to the
+#    load-phase EDPVR (pure passive). volume0 is afterload-independent, so
+#    guccione_C tracks the true material a and is decoupled from afterload.
+#  - prestress = 0: the unloaded state has zero transmural pressure -> zero stress.
 #  - t_shift = 0: contraction onset = end-diastole (cycle rolled to t=0);
 #    otherwise redundant with the rise/fall times tau_1, tau_2.
-#  - n = 1 (sphere): the shape factor is NOT identifiable from a single loaded
-#    P-V loop -- the fit error decreases monotonically with n (see profile_n.py),
-#    so fitting it just flattens the geometry. Set a fixed value here instead.
-NOT_CALIBRATED = ("volume0", "prestress", "t_shift", "n")
-DATA_DERIVED = ("volume0", "prestress")
+#  - n = 1 (sphere): NOT identifiable from a loaded loop (see profile_n.py).
+# Stage 2 fits only the active parameters from the cardiac cycle.
+NOT_CALIBRATED = ("volume0", "guccione_C", "prestress", "t_shift", "n")
+FROM_LOAD = ("volume0", "guccione_C")  # estimated from the passive load phase
+DATA_DERIVED = FROM_LOAD  # (label used by the plotting scripts)
 N_SHAPE = 1.0
-FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 6
+FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 5
 
 
-def data_fixed(t, P, V, volume0):
-    """Fixed parameters: volume0 (unloaded, passed in), prestress = P_min,
+def data_fixed(t, P, V, volume0, guccione_C):
+    """Fixed parameters: volume0 and guccione_C (from stage 1), prestress = 0,
     t_shift = 0, n = 1."""
-    return {"volume0": float(volume0), "prestress": float(P.min()),
-            "t_shift": 0.0, "n": N_SHAPE}
+    return {"volume0": float(volume0), "guccione_C": float(guccione_C),
+            "prestress": 0.0, "t_shift": 0.0, "n": N_SHAPE}
 
 
 def _expand(theta_free, fixed):
@@ -190,13 +226,14 @@ def residual_free(theta_free, t, P, V, scale, fixed, b_f, b_t):
     return residual(_expand(theta_free, fixed), t, P, V, scale, b_f, b_t)
 
 
-def calibrate_cycle(t, P, V, b_f, b_t, volume0):
-    fixed = data_fixed(t, P, V, volume0)
-    # start guess (SI) for the 6 free params: guccione_C, gamma_sigma_max,
-    # tau_1, tau_2, m1, m2 (two-hill twitch; t_shift and n fixed)
-    theta0 = np.array([2.0e3, 3.0e4, 0.08, 0.18, 8.0, 8.0])
-    lb = np.array([0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
-    ub = np.array([1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
+def calibrate_cycle(t, P, V, b_f, b_t, volume0, guccione_C):
+    fixed = data_fixed(t, P, V, volume0, guccione_C)
+    # start guess (SI) for the 5 free active params: gamma_sigma_max,
+    # tau_1, tau_2, m1, m2 (two-hill twitch; volume0, guccione_C, prestress,
+    # t_shift and n fixed)
+    theta0 = np.array([3.0e4, 0.08, 0.18, 8.0, 8.0])
+    lb = np.array([0.0, 0.02, 0.05, 1.0, 1.0])
+    ub = np.array([1e7, 0.4, 0.6, 40.0, 40.0])
     theta0 = np.clip(theta0, lb + 1e-12, ub - 1e-12)
 
     # residual scale ~ characteristic stress rate, keeps the cost well-scaled
@@ -241,8 +278,9 @@ def main():
         try:
             t, P, V = load_cycle(path)
             b_f, b_t = read_b(path)
+            volume0, guccione_C = estimate_passive(path, b_f, b_t)  # stage 1
             theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(
-                t, P, V, b_f, b_t, read_unloaded(path))
+                t, P, V, b_f, b_t, volume0, guccione_C)            # stage 2
             names.append(name); thetas.append(theta); rmss.append(rms)
             amps.append(tau_amp); relses.append(rel_se); bounds.append(at_bound)
         except Exception as e:
@@ -271,10 +309,10 @@ def main():
     print("-" * 80)
     for i, nm in enumerate(PARAM_NAMES):
         col = thetas[:, i]
-        if nm in DATA_DERIVED:
+        if nm in FROM_LOAD:
             print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
                   f"{np.percentile(col,10):>13.4g}{np.percentile(col,90):>13.4g}"
-                  f"{'-':>10}{'-':>9}  from data")
+                  f"{'-':>10}{'-':>9}  from load")
             continue
         if nm not in [PARAM_NAMES[k] for k in FREE]:
             print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"

@@ -24,7 +24,7 @@ def run_all():
             t, P, V = cy.load_cycle(path)
             b_f, b_t = cy.read_b(path)
             theta, rms, amp, rel_se, at_bound = cy.calibrate_cycle(
-                t, P, V, b_f, b_t, cy.read_unloaded(path))
+                t, P, V, b_f, b_t, *cy.estimate_passive(path, b_f, b_t))
             thetas.append(theta); relses.append(rel_se); bounds.append(at_bound)
             relfit.append(rms / max(amp, 1.0))
             loops.append((V * 1e6, P / cy.MMHG_TO_PA, theta))  # mL, mmHg

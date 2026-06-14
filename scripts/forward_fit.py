@@ -16,7 +16,7 @@ from scipy.optimize import least_squares
 import calibrate_yale as cy
 
 N_CYCLES = 2
-FREE_NAMES = ["guccione_C", "gamma_sigma_max", "tau_1", "tau_2", "m1", "m2"]
+FREE_NAMES = ["gamma_sigma_max", "tau_1", "tau_2", "m1", "m2"]
 
 
 def run_forward(vals, t, V, dVdt):
@@ -52,20 +52,21 @@ def run_forward(vals, t, V, dVdt):
 
 def base_vals(theta_free, fixed, b_f, b_t):
     v = dict(zip(FREE_NAMES, theta_free))
-    v.update(volume0=fixed["volume0"], prestress=fixed["prestress"],
-             t_shift=0.0, b_f=float(b_f), b_t=float(b_t))
+    v.update(volume0=fixed["volume0"], guccione_C=fixed["guccione_C"],
+             prestress=fixed["prestress"], t_shift=0.0,
+             b_f=float(b_f), b_t=float(b_t))
     return v
 
 
 def fit_cycle(path):
     t, P, V = cy.load_cycle(path)
     b_f, b_t = cy.read_b(path)
-    volume0 = cy.read_unloaded(path)
+    volume0, guccione_C = cy.estimate_passive(path, b_f, b_t)
     dVdt = np.gradient(V, t, edge_order=2)
-    fixed = cy.data_fixed(t, P, V, volume0)
+    fixed = cy.data_fixed(t, P, V, volume0, guccione_C)
 
     # warm start from the reconstruction fit
-    theta0_full, *_ = cy.calibrate_cycle(t, P, V, b_f, b_t, volume0)
+    theta0_full, *_ = cy.calibrate_cycle(t, P, V, b_f, b_t, volume0, guccione_C)
     x0 = np.array([theta0_full[cy.PARAM_NAMES.index(n)] for n in FREE_NAMES])
     scale = max(P.max() - P.min(), 1e3)
 
@@ -74,8 +75,8 @@ def fit_cycle(path):
 
     # pressure RMS of the warm start (reconstruction fit), then forward-fit
     rms_recon = np.sqrt(np.mean((resid(x0) * scale) ** 2)) / (P.max() - P.min())
-    lb = np.array([0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
-    ub = np.array([1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
+    lb = np.array([0.0, 0.02, 0.05, 1.0, 1.0])
+    ub = np.array([1e7, 0.4, 0.6, 40.0, 40.0])
     r = least_squares(resid, np.clip(x0, lb + 1e-9, ub - 1e-9), bounds=(lb, ub),
                       method="trf", x_scale="jac", max_nfev=200, ftol=1e-8, xtol=1e-8)
     rms_fwd = np.sqrt(np.mean((r.fun * scale) ** 2)) / (P.max() - P.min())
@@ -88,14 +89,14 @@ def cold_start_check(path):
     t, P, V = cy.load_cycle(path)
     b_f, b_t = cy.read_b(path)
     dVdt = np.gradient(V, t, edge_order=2)
-    fixed = cy.data_fixed(t, P, V, cy.read_unloaded(path))
+    fixed = cy.data_fixed(t, P, V, *cy.estimate_passive(path, b_f, b_t))
     scale = max(P.max() - P.min(), 1e3)
 
     def resid(x):
         return (run_forward(base_vals(x, fixed, b_f, b_t), t, V, dVdt) - P) / scale
-    x_cold = np.array([5.0e2, 3.0e4, 0.10, 0.30, 5.0, 5.0])
-    lb = np.array([0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
-    ub = np.array([1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
+    x_cold = np.array([3.0e4, 0.10, 0.30, 5.0, 5.0])
+    lb = np.array([0.0, 0.02, 0.05, 1.0, 1.0])
+    ub = np.array([1e7, 0.4, 0.6, 40.0, 40.0])
     r = least_squares(resid, x_cold, bounds=(lb, ub), method="trf", x_scale="jac",
                       max_nfev=400, ftol=1e-8, xtol=1e-8)
     return np.sqrt(np.mean((r.fun * scale) ** 2)) / (P.max() - P.min())
