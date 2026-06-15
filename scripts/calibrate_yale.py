@@ -5,18 +5,19 @@ active stress ``tau`` is a hidden state. Following the point-wise calibration
 strategy (claude/gallant-yonath-faecaa) adapted to partial observations, the
 full state is reconstructed from (P, V) *as a function of the parameters*:
 
-    stretch = (V_total / volume0)^(1/3),   CG = stretch^2          (geometry)
+    stretch = (V_total / volume0)^(1/3)                            (geometry)
     stress  = P * stretch                                          (residual 0)
-    tau     = stress - 4*gamma_W1*(1 - CG^-3) - prestress          (residual 1)
+    tau     = stress - passive_guccione(stretch)                   (residual 1)
 
-The only equation not satisfied by construction is the active-stress ODE
-(residual 2), which becomes the calibration residual:
+The stretch reference volume0 is taken directly from the 3D data (the unloaded
+cavity volume at P = 0), not fitted. The remaining equation is the active-stress
+twitch, which becomes the calibration residual:
 
-    r(t) = d(tau)/dt + act*tau - gamma_sigma_max*act_plus
+    r(t) = gamma_sigma_max * twohill(t) - tau(t)
 
-with the activation act/act_plus identical to ChamberSphere::get_elastance_values.
-All nine parameters are fit per cycle by minimizing sum_t r(t)^2 with
-Levenberg-Marquardt (scipy.optimize.least_squares).
+The six free parameters (guccione_C, gamma_sigma_max, tau_1, tau_2, m1, m2) are
+fit per cycle by minimizing sum_t r(t)^2 with Levenberg-Marquardt
+(scipy.optimize.least_squares).
 
 Units: the data is mmHg / mL / ms; everything is converted to SI (Pa, m^3, s).
 """
@@ -184,24 +185,26 @@ def residual(theta, t, P, V, scale, b_f, b_t):
     return (model_tau(theta, t) - tau_obs) / scale
 
 
-# Single joint fit of all seven free parameters (volume0, guccione_C,
-# gamma_sigma_max, tau_1, tau_2, m1, m2) from the full cardiac cycle. There is no
-# prestress term (the unloaded state has zero transmural pressure -> zero stress).
-# The requirement that the reconstructed tau be a single clean twitch over the
-# whole cycle (~0 in diastole, smooth hump in systole) makes volume0 identifiable
-# -- it no longer rails to ESV. Held constant:
+# Joint fit of the six free parameters (guccione_C, gamma_sigma_max, tau_1,
+# tau_2, m1, m2) from the full cardiac cycle. There is no prestress term (the
+# unloaded state has zero transmural pressure -> zero stress). Held constant:
+#  - volume0: taken directly from the 3D data (read_unloaded = the unloaded
+#    cavity volume at P = 0, the stretch reference). Fixing it to the true
+#    geometric value -- rather than fitting it -- removes the passive/stretch
+#    confounding, so guccione_C cleanly tracks the 3D material a (corr ~0.99,
+#    decoupled from afterload) instead of absorbing it (see diagnose_tradeoff.py).
 #  - t_shift = 0: contraction onset = end-diastole (cycle rolled to t=0);
 #    otherwise redundant with the rise/fall times tau_1, tau_2.
 #  - n = 1 (sphere): NOT identifiable from a loaded loop (see profile_n.py).
-NOT_CALIBRATED = ("t_shift", "n")
-DATA_DERIVED = ()  # nothing read directly from the data (label used by plots)
+NOT_CALIBRATED = ("volume0", "t_shift", "n")
+DATA_DERIVED = ("volume0",)  # read directly from the 3D data (label used by plots)
 N_SHAPE = 1.0
-FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 7
+FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 6
 
 
-def data_fixed(t, P, V):
-    """Fixed parameters: t_shift = 0, n = 1."""
-    return {"t_shift": 0.0, "n": N_SHAPE}
+def data_fixed(t, P, V, volume0):
+    """Fixed parameters: volume0 (from the 3D data), t_shift = 0, n = 1."""
+    return {"volume0": float(volume0), "t_shift": 0.0, "n": N_SHAPE}
 
 
 def _expand(theta_free, fixed):
@@ -217,14 +220,13 @@ def residual_free(theta_free, t, P, V, scale, fixed, b_f, b_t):
     return residual(_expand(theta_free, fixed), t, P, V, scale, b_f, b_t)
 
 
-def calibrate_cycle(t, P, V, b_f, b_t):
-    fixed = data_fixed(t, P, V)
-    # start guess (SI) for the 7 free params: volume0, guccione_C,
-    # gamma_sigma_max, tau_1, tau_2, m1, m2 (prestress, t_shift, n fixed)
-    Vmax = V.max()
-    theta0 = np.array([0.9 * V.min(), 2.0e3, 3.0e4, 0.08, 0.18, 8.0, 8.0])
-    lb = np.array([4.0e-5, 0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
-    ub = np.array([0.99 * Vmax, 1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
+def calibrate_cycle(t, P, V, b_f, b_t, volume0):
+    fixed = data_fixed(t, P, V, volume0)
+    # start guess (SI) for the 6 free params: guccione_C, gamma_sigma_max,
+    # tau_1, tau_2, m1, m2 (volume0, t_shift, n fixed)
+    theta0 = np.array([2.0e3, 3.0e4, 0.08, 0.18, 8.0, 8.0])
+    lb = np.array([0.0, 0.0, 0.02, 0.05, 1.0, 1.0])
+    ub = np.array([1e6, 1e7, 0.4, 0.6, 40.0, 40.0])
     theta0 = np.clip(theta0, lb + 1e-12, ub - 1e-12)
 
     # residual scale ~ characteristic stress rate, keeps the cost well-scaled
@@ -269,7 +271,9 @@ def main():
         try:
             t, P, V = load_cycle(path)
             b_f, b_t = read_b(path)
-            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(t, P, V, b_f, b_t)
+            volume0 = read_unloaded(path)
+            theta, rms, tau_amp, rel_se, at_bound = calibrate_cycle(
+                t, P, V, b_f, b_t, volume0)
             names.append(name); thetas.append(theta); rmss.append(rms)
             amps.append(tau_amp); relses.append(rel_se); bounds.append(at_bound)
         except Exception as e:
@@ -299,8 +303,9 @@ def main():
     for i, nm in enumerate(PARAM_NAMES):
         col = thetas[:, i]
         if nm not in [PARAM_NAMES[k] for k in FREE]:
+            tag = "from data" if nm in DATA_DERIVED else "fixed"
             print(f"{nm:<16}{units[i]:>6}{np.median(col):>13.4g}"
-                  f"{'-':>13}{'-':>13}{'-':>10}{'-':>9}  fixed")
+                  f"{'-':>13}{'-':>13}{'-':>10}{'-':>9}  {tag}")
             continue
         med_relse = np.nanmedian(relses[:, i])
         pct_bound = 100.0 * np.mean(bounds[:, i])

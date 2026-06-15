@@ -19,7 +19,7 @@ N_CYCLES = 4  # run a few cycles; compare the converged last one
 def forward_pv(path):
     t, P, V = cy.load_cycle(path)            # SI, last beat, rolled to EDV at t=0
     b_f, b_t = cy.read_b(path)
-    theta, _, _, _, _ = cy.calibrate_cycle(t, P, V, b_f, b_t)
+    theta, _, _, _, _ = cy.calibrate_cycle(t, P, V, b_f, b_t, cy.read_unloaded(path))
     names = cy.PARAM_NAMES
     vals = {names[i]: float(theta[i]) for i in range(len(names))}
     vals.pop("n", None)  # the C++ block bakes in n = 1 (not an input parameter)

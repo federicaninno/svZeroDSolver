@@ -37,7 +37,8 @@ def main():
         try:
             t, P, V = cy.load_cycle(path)
             b_f, b_t = cy.read_b(path)
-            theta, rms, amp, _, _ = cy.calibrate_cycle(t, P, V, b_f, b_t)
+            theta, rms, amp, _, _ = cy.calibrate_cycle(
+                t, P, V, b_f, b_t, cy.read_unloaded(path))
             Pm = model_pressure(theta, t, P, V, b_f, b_t)
             results.append((int(name.split("_")[1]), V * 1e6, P / MMHG, Pm / MMHG,
                             rms / max(amp, 1.0)))
