@@ -16,16 +16,16 @@ import calibrate_yale as cy
 
 X = np.loadtxt(os.path.expanduser(
     "~/Downloads/simulations_data_yale/data/X.txt"))  # a_ventricles, EDP_lv, Rsys
-FREE_IDX = [1, 2, 5, 6, 7, 8]  # guccione_C, gamma_sigma_max, tau_1, tau_2, m1, m2
+FREE_IDX = [1, 2, 4, 5, 6, 7]  # guccione_C, gamma_sigma_max, tau_1, tau_2, m1, m2
 
 
-def fit(t, P, V, b_f, b_t, volume0, prestress):
+def fit(t, P, V, b_f, b_t, volume0, prestress=0.0):
     scale = max(np.max(np.abs(P)), 1e3)
 
     def expand(xf):
         th = np.empty(len(cy.PARAM_NAMES))
         th[FREE_IDX] = xf
-        th[0] = volume0; th[3] = prestress; th[4] = 0.0; th[9] = 1.0
+        th[0] = volume0; th[3] = 0.0; th[8] = 1.0  # t_shift = 0, n = 1
         return th
 
     def resid(xf):

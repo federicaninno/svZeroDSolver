@@ -21,9 +21,9 @@ MMHG = cy.MMHG_TO_PA
 
 
 def model_pressure(theta, t, P, V, b_f, b_t):
-    volume0, C, _, prestress = theta[:4]
+    volume0, C = theta[0], theta[1]
     stretch = (V / volume0) ** (1.0 / 3.0)
-    passive = cy.passive_guccione(stretch, C, b_f, b_t) + prestress
+    passive = cy.passive_guccione(stretch, C, b_f, b_t)
     tau_pred = cy.model_tau(theta, t)
     return (tau_pred + passive) / stretch  # Pa
 

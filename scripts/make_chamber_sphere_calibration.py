@@ -37,7 +37,6 @@ TRUE = {
     "volume0": 1.0e-4,
     "guccione_C": 1.0e3,
     "gamma_sigma_max": 1.85e5,
-    "prestress": 1.0e3,
     "t_shift": -0.05,   # negative so the twitch argument stays > 0 (log-safe Jacobian)
     "tau_1": 0.12,
     "tau_2": 0.30,
@@ -106,8 +105,7 @@ def main():
 
     # Reconstruct the consistent full state (every residual vanishes exactly).
     tau = p["gamma_sigma_max"] * twohill(t, p)                       # residual 2 (algebraic)
-    stress = tau + passive_guccione(stretch, p["guccione_C"], p["b_f"], p["b_t"]) \
-        + p["prestress"]                                            # residual 1
+    stress = tau + passive_guccione(stretch, p["guccione_C"], p["b_f"], p["b_t"])  # residual 1
     Pout = stress / stretch                                          # residual 0
     Pin = Pout                                                       # residual 4
 

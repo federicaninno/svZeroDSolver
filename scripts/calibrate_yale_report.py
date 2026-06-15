@@ -20,7 +20,7 @@ def example_figure(cycle="cycle_0"):
     tau_pred = cy.model_tau(theta, t)
     # model pressure at the observed volume (Python forward model)
     stretch = (V / theta[0]) ** (1.0 / 3.0)
-    passive = cy.passive_guccione(stretch, theta[1], b_f, b_t) + theta[3]
+    passive = cy.passive_guccione(stretch, theta[1], b_f, b_t)
     Pmodel = (tau_pred + passive) / stretch
 
     fig, ax = plt.subplots(1, 3, figsize=(13, 4))
@@ -33,7 +33,7 @@ def example_figure(cycle="cycle_0"):
     ax[1].set(xlabel="time [s]", ylabel="active stress tau [kPa]",
               title=f"active-stress fit (rel err {rms/max(amp,1):.1%})")
     ax[1].legend(fontsize=8)
-    ax[2].plot(t, cy.twohill(t, *theta[4:9]), color="#c44")
+    ax[2].plot(t, cy.twohill(t, *theta[3:8]), color="#c44")
     ax[2].set(xlabel="time [s]", ylabel="activation A(t)",
               title="calibrated two-hill twitch")
     fig.tight_layout()

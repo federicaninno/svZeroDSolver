@@ -52,8 +52,7 @@ def run_forward(vals, t, V, dVdt):
 
 def base_vals(theta_free, fixed, b_f, b_t):
     v = dict(zip(FREE_NAMES, theta_free))
-    v.update(prestress=fixed["prestress"], t_shift=0.0,
-             b_f=float(b_f), b_t=float(b_t))
+    v.update(t_shift=0.0, b_f=float(b_f), b_t=float(b_t))
     return v
 
 

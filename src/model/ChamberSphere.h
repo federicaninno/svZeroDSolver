@@ -44,7 +44,7 @@
  * \f[
  * -S + \tau + S_\text{pas} = 0, \quad
  * S_\text{pas} = C e^{Q} \left[ \frac{b_f + b_t}{2} \lambda^2 E_p
- * - b_t \lambda^{-4} E_r \right] + \text{prestress}
+ * - b_t \lambda^{-4} E_r \right]
  * \f]
  * with \f$\lambda^2 = C_G\f$, in-plane/radial Green-Lagrange strains
  * \f$E_p = (\lambda^2 - 1)/2\f$, \f$E_r = (\lambda^{-4} - 1)/2\f$ and
@@ -88,7 +88,6 @@
  * * `volume0` - Reference (unloaded) chamber volume \f$V_0\f$
  * * `guccione_C` - Scaled Guccione passive scaling \f$\gamma C\f$
  * * `gamma_sigma_max` - Scaled maximum active stress \f$\gamma \sigma_\text{max}\f$
- * * `prestress` - Prestress
  * * `t_shift` - Two-hill twitch onset \f$t_\text{shift}\f$
  * * `tau_1` - Two-hill rise time \f$\tau_1\f$
  * * `tau_2` - Two-hill fall time \f$\tau_2\f$
@@ -110,7 +109,6 @@
  *                "volume0" : 1e-4,
  *                "guccione_C" : 1e3,
  *                "gamma_sigma_max" : 185e3,
- *                "prestress" : 0.0,
  *                "t_shift": 0.0,
  *                "tau_1": 0.12,
  *                "tau_2": 0.30,
@@ -143,14 +141,13 @@ class ChamberSphere : public Block {
     volume0 = 0,
     guccione_C = 1,
     gamma_sigma_max = 2,
-    prestress = 3,
-    t_shift = 4,
-    tau_1 = 5,
-    tau_2 = 6,
-    m1 = 7,
-    m2 = 8,
-    b_f = 9,
-    b_t = 10
+    t_shift = 3,
+    tau_1 = 4,
+    tau_2 = 5,
+    m1 = 6,
+    m2 = 7,
+    b_f = 8,
+    b_t = 9
   };
 
   /**
@@ -164,7 +161,6 @@ class ChamberSphere : public Block {
               {{"volume0", InputParameter()},
                {"guccione_C", InputParameter()},
                {"gamma_sigma_max", InputParameter()},
-               {"prestress", InputParameter()},
                {"t_shift", InputParameter()},
                {"tau_1", InputParameter()},
                {"tau_2", InputParameter()},
@@ -222,7 +218,7 @@ class ChamberSphere : public Block {
    *
    * Calibrates the chamber from a full-state observation set (the data carry the
    * internal variables stress, tau, volume and their derivatives). The passive
-   * parameters (volume0, guccione_C, prestress, b_f, b_t) appear in the momentum
+   * parameters (volume0, guccione_C, b_f, b_t) appear in the momentum
    * and spherical-stress equations, which are pure functions of the state. The
    * active-stress equation (and its parameters gamma_sigma_max and the two-hill
    * twitch t_shift, tau_1, tau_2, m1, m2) depends on the observation time,

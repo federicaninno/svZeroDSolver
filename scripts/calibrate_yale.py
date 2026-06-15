@@ -35,7 +35,7 @@ DATA_DIR = os.path.expanduser("~/Downloads/simulations_data_yale/simulations_yal
 OUT_DIR = os.path.expanduser("~/Downloads/simulations_data_yale")
 
 PARAM_NAMES = [
-    "volume0", "guccione_C", "gamma_sigma_max", "prestress",
+    "volume0", "guccione_C", "gamma_sigma_max",
     "t_shift", "tau_1", "tau_2", "m1", "m2", "n",
 ]
 
@@ -163,18 +163,18 @@ def twohill(t, t_shift, tau_1, tau_2, m1, m2):
 def reconstruct_tau(theta, P, V, b_f, b_t):
     """Active stress tau reconstructed from (P, V) via residuals 0 and 1, with a
     Guccione passive law (scaling C = theta[1], b parameters from the data) and a
-    shape-correction factor n = theta[9] in the stretch (n = 1 is a sphere)."""
-    volume0, C, _, prestress = theta[:4]
-    n = theta[9]
+    shape-correction factor n = theta[8] in the stretch (n = 1 is a sphere)."""
+    volume0, C = theta[0], theta[1]
+    n = theta[8]
     stretch = (V / volume0) ** (1.0 / (3.0 * n))
     stress = P * stretch
-    tau = stress - passive_guccione(stretch, C, b_f, b_t) - prestress
+    tau = stress - passive_guccione(stretch, C, b_f, b_t)
     return tau
 
 
 def model_tau(theta, t):
     """Active stress from the algebraic two-hill twitch: tau = gamma_sigma_max A(t)."""
-    return theta[2] * twohill(t, *theta[4:9])
+    return theta[2] * twohill(t, *theta[3:8])
 
 
 def residual(theta, t, P, V, scale, b_f, b_t):
@@ -185,24 +185,23 @@ def residual(theta, t, P, V, scale, b_f, b_t):
 
 
 # Single joint fit of all seven free parameters (volume0, guccione_C,
-# gamma_sigma_max, tau_1, tau_2, m1, m2) from the full cardiac cycle. With
-# prestress = 0 (the correct unloaded value), the prestress-volume0 tradeoff is
-# removed and the requirement that the reconstructed tau be a single clean twitch
-# over the whole cycle (~0 in diastole, smooth hump in systole) makes volume0
-# identifiable -- it no longer rails to ESV. Held constant:
-#  - prestress = 0: the unloaded state has zero transmural pressure -> zero stress.
+# gamma_sigma_max, tau_1, tau_2, m1, m2) from the full cardiac cycle. There is no
+# prestress term (the unloaded state has zero transmural pressure -> zero stress).
+# The requirement that the reconstructed tau be a single clean twitch over the
+# whole cycle (~0 in diastole, smooth hump in systole) makes volume0 identifiable
+# -- it no longer rails to ESV. Held constant:
 #  - t_shift = 0: contraction onset = end-diastole (cycle rolled to t=0);
 #    otherwise redundant with the rise/fall times tau_1, tau_2.
 #  - n = 1 (sphere): NOT identifiable from a loaded loop (see profile_n.py).
-NOT_CALIBRATED = ("prestress", "t_shift", "n")
+NOT_CALIBRATED = ("t_shift", "n")
 DATA_DERIVED = ()  # nothing read directly from the data (label used by plots)
 N_SHAPE = 1.0
 FREE = [i for i, nm in enumerate(PARAM_NAMES) if nm not in NOT_CALIBRATED]  # 7
 
 
 def data_fixed(t, P, V):
-    """Fixed parameters: prestress = 0, t_shift = 0, n = 1."""
-    return {"prestress": 0.0, "t_shift": 0.0, "n": N_SHAPE}
+    """Fixed parameters: t_shift = 0, n = 1."""
+    return {"t_shift": 0.0, "n": N_SHAPE}
 
 
 def _expand(theta_free, fixed):
@@ -293,7 +292,7 @@ def main():
     print(f"wrote {out_csv} ({len(names)} cycles)")
 
     # structured summary: value distribution + identifiability per parameter
-    units = ["m^3", "Pa", "Pa", "Pa", "s", "s", "s", "-", "-", "-"]
+    units = ["m^3", "Pa", "Pa", "s", "s", "s", "-", "-", "-"]
     print(f"\n{'parameter':<16}{'unit':>6}{'median':>13}{'p10':>13}{'p90':>13}"
           f"{'rel.SE':>10}{'%@bound':>9}")
     print("-" * 80)

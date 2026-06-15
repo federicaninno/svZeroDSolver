@@ -9,7 +9,7 @@ from scipy.optimize import least_squares
 
 import calibrate_yale as cy
 
-FREE_IDX = [1, 2, 5, 6, 7, 8]  # guccione_C, gamma_sigma_max, tau_1, tau_2, m1, m2
+FREE_IDX = [1, 2, 4, 5, 6, 7]  # guccione_C, gamma_sigma_max, tau_1, tau_2, m1, m2
 
 
 def fit_fixed_n(t, P, V, b_f, b_t, n_val, volume0):
@@ -19,8 +19,7 @@ def fit_fixed_n(t, P, V, b_f, b_t, n_val, volume0):
     def expand(xf):
         th = np.empty(len(cy.PARAM_NAMES))
         th[FREE_IDX] = xf
-        th[0] = volume0; th[3] = 0.0
-        th[4] = 0.0; th[9] = n_val
+        th[0] = volume0; th[3] = 0.0; th[8] = n_val  # t_shift = 0, n profiled
         return th
 
     def resid(xf):

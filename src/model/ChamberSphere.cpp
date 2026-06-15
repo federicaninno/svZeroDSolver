@@ -27,12 +27,12 @@ void ChamberSphere::update_constant(SparseSystem& system,
 void ChamberSphere::update_time(SparseSystem& system,
                                 std::vector<double>& parameters) {
   // active stress is the algebraic two-hill twitch tau = gamma_sigma_max A(t)
-  const double tau_1 = parameters[global_param_ids[ParamId::tau_1]];
-  const double tau_2 = parameters[global_param_ids[ParamId::tau_2]];
-  const double gamma_sigma_max = parameters[global_param_ids[ParamId::gamma_sigma_max]];
-  const double m1 = parameters[global_param_ids[ParamId::m1]];
-  const double m2 = parameters[global_param_ids[ParamId::m2]];
   const double t_shift = parameters[global_param_ids[ParamId::t_shift]];
+  const double m2 = parameters[global_param_ids[ParamId::m2]];
+  const double m1 = parameters[global_param_ids[ParamId::m1]];
+  const double tau_1 = parameters[global_param_ids[ParamId::tau_1]];
+  const double gamma_sigma_max = parameters[global_param_ids[ParamId::gamma_sigma_max]];
+  const double tau_2 = parameters[global_param_ids[ParamId::tau_2]];
   const double t = model->cardiac_cycle_period > 0.0 ? fmod(model->time, model->cardiac_cycle_period) : model->time;
   system.C.coeffRef(global_eqn_ids[2]) = -gamma_sigma_max*pow((t - t_shift)/tau_1, m1)/((pow((t - t_shift)/tau_1, m1) + 1)*(pow((t - t_shift)/tau_2, m2) + 1));
 }
@@ -42,19 +42,18 @@ void ChamberSphere::update_solution(
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& y,
     const Eigen::Matrix<double, Eigen::Dynamic, 1>& dy) {
   const double b_f = parameters[global_param_ids[ParamId::b_f]];
-  const double guccione_C = parameters[global_param_ids[ParamId::guccione_C]];
   const double b_t = parameters[global_param_ids[ParamId::b_t]];
-  const double prestress = parameters[global_param_ids[ParamId::prestress]];
   const double volume0 = parameters[global_param_ids[ParamId::volume0]];
+  const double guccione_C = parameters[global_param_ids[ParamId::guccione_C]];
   const double volume = y[global_var_ids[6]];
   const double stress = y[global_var_ids[4]];
   const double Pout = y[global_var_ids[2]];
   system.C.coeffRef(global_eqn_ids[0]) = -Pout*pow((volume + volume0)/volume0, 0.66666666666666663) + Pout + stress*pow((volume + volume0)/volume0, 0.33333333333333331) - stress;
-  system.C.coeffRef(global_eqn_ids[1]) = pow((volume + volume0)/volume0, -2.6666666666666665)*(-guccione_C*(0.5*b_t*(1 - pow((volume + volume0)/volume0, 1.3333333333333333)) - 0.25*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1))*exp(0.25*pow((volume + volume0)/volume0, -2.6666666666666665)*(b_t*pow(1 - pow((volume + volume0)/volume0, 1.3333333333333333), 2) + pow((volume + volume0)/volume0, 2.6666666666666665)*(b_f + b_t)*pow(pow((volume + volume0)/volume0, 0.66666666666666663) - 1, 2))) + prestress*pow((volume + volume0)/volume0, 2.6666666666666665));
+  system.C.coeffRef(global_eqn_ids[1]) = guccione_C*pow((volume + volume0)/volume0, -2.6666666666666665)*(0.5*b_t*(pow((volume + volume0)/volume0, 1.3333333333333333) - 1) + 0.25*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1))*exp(0.25*pow((volume + volume0)/volume0, -2.6666666666666665)*(b_t*pow(pow((volume + volume0)/volume0, 1.3333333333333333) - 1, 2) + pow((volume + volume0)/volume0, 2.6666666666666665)*(b_f + b_t)*pow(pow((volume + volume0)/volume0, 0.66666666666666663) - 1, 2)));
   system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[2]) = 1 - pow((volume + volume0)/volume0, 0.66666666666666663);
   system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[4]) = pow((volume + volume0)/volume0, 0.33333333333333331) - 1;
   system.dC_dy.coeffRef(global_eqn_ids[0], global_var_ids[6]) = (-0.66666666666666663*Pout*pow((volume + volume0)/volume0, 0.66666666666666663) + 0.33333333333333331*stress*pow((volume + volume0)/volume0, 0.33333333333333331))/(volume + volume0);
-  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[6]) = pow((volume + volume0)/volume0, -8.0)*(pow((volume + volume0)/volume0, 2.6666666666666665)*(guccione_C*(0.5*b_t*(pow((volume + volume0)/volume0, 1.3333333333333333) - 1) + 0.25*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1))*(0.66666666666666663*b_t*pow((volume + volume0)/volume0, 1.3333333333333333)*(pow((volume + volume0)/volume0, 1.3333333333333333) - 1) - 0.66666666666666663*b_t*pow(pow((volume + volume0)/volume0, 1.3333333333333333) - 1, 2) + 0.33333333333333331*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1))*exp(0.25*pow((volume + volume0)/volume0, -2.6666666666666665)*(b_t*pow(pow((volume + volume0)/volume0, 1.3333333333333333) - 1, 2) + pow((volume + volume0)/volume0, 2.6666666666666665)*(b_f + b_t)*pow(pow((volume + volume0)/volume0, 0.66666666666666663) - 1, 2))) + pow((volume + volume0)/volume0, 2.6666666666666665)*(guccione_C*(0.66666666666666663*b_t*pow((volume + volume0)/volume0, 1.3333333333333333) + 0.83333333333333326*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1) + 0.16666666666666666*pow((volume + volume0)/volume0, 3.9999999999999996)*(b_f + b_t))*exp(0.25*pow((volume + volume0)/volume0, -2.6666666666666665)*(b_t*pow(pow((volume + volume0)/volume0, 1.3333333333333333) - 1, 2) + pow((volume + volume0)/volume0, 2.6666666666666665)*(b_f + b_t)*pow(pow((volume + volume0)/volume0, 0.66666666666666663) - 1, 2))) + 2.6666666666666665*prestress*pow((volume + volume0)/volume0, 2.6666666666666665))) - 2.6666666666666665*pow((volume + volume0)/volume0, 5.333333333333333)*(guccione_C*(0.5*b_t*(pow((volume + volume0)/volume0, 1.3333333333333333) - 1) + 0.25*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1))*exp(0.25*pow((volume + volume0)/volume0, -2.6666666666666665)*(b_t*pow(pow((volume + volume0)/volume0, 1.3333333333333333) - 1, 2) + pow((volume + volume0)/volume0, 2.6666666666666665)*(b_f + b_t)*pow(pow((volume + volume0)/volume0, 0.66666666666666663) - 1, 2))) + prestress*pow((volume + volume0)/volume0, 2.6666666666666665)))/(volume + volume0);
+  system.dC_dy.coeffRef(global_eqn_ids[1], global_var_ids[6]) = guccione_C*pow((volume + volume0)/volume0, -8.0)*(pow((volume + volume0)/volume0, 2.6666666666666665)*(0.5*b_t*(pow((volume + volume0)/volume0, 1.3333333333333333) - 1) + 0.25*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1))*(0.66666666666666663*b_t*pow((volume + volume0)/volume0, 1.3333333333333333)*(pow((volume + volume0)/volume0, 1.3333333333333333) - 1) - 0.66666666666666663*b_t*pow(pow((volume + volume0)/volume0, 1.3333333333333333) - 1, 2) + 0.33333333333333331*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1)) + pow((volume + volume0)/volume0, 5.333333333333333)*(0.66666666666666663*b_t*pow((volume + volume0)/volume0, 1.3333333333333333) - 1.3333333333333333*b_t*(pow((volume + volume0)/volume0, 1.3333333333333333) - 1) + 0.16666666666666663*pow((volume + volume0)/volume0, 3.333333333333333)*(b_f + b_t)*(pow((volume + volume0)/volume0, 0.66666666666666663) - 1) + 0.16666666666666666*pow((volume + volume0)/volume0, 3.9999999999999996)*(b_f + b_t)))*exp(0.25*pow((volume + volume0)/volume0, -2.6666666666666665)*(b_t*pow(pow((volume + volume0)/volume0, 1.3333333333333333) - 1, 2) + pow((volume + volume0)/volume0, 2.6666666666666665)*(b_f + b_t)*pow(pow((volume + volume0)/volume0, 0.66666666666666663) - 1, 2)))/(volume + volume0);
 }
 
 
@@ -67,7 +66,6 @@ void ChamberSphere::update_gradient(
   const double volume0 = alpha[global_param_ids[ParamId::volume0]];
   const double guccione_C = alpha[global_param_ids[ParamId::guccione_C]];
   const double gamma_sigma_max = alpha[global_param_ids[ParamId::gamma_sigma_max]];
-  const double prestress = alpha[global_param_ids[ParamId::prestress]];
   const double t_shift = alpha[global_param_ids[ParamId::t_shift]];
   const double tau_1 = alpha[global_param_ids[ParamId::tau_1]];
   const double tau_2 = alpha[global_param_ids[ParamId::tau_2]];
@@ -132,7 +130,7 @@ void ChamberSphere::update_gradient(
   const double x44 = gamma_sigma_max*x17*x42;
 
   residual(global_eqn_ids[0]) = stress*x5 - x4;
-  residual(global_eqn_ids[1]) = guccione_C*(-b_t*x7*x8 + x10*x3*(0.5*b_f + x11))*exp(b_t*pow(x8, 2) + pow(x10, 2)*x9) + prestress - stress + tau;
+  residual(global_eqn_ids[1]) = guccione_C*(-b_t*x7*x8 + x10*x3*(0.5*b_f + x11))*exp(b_t*pow(x8, 2) + pow(x10, 2)*x9) - stress + tau;
   residual(global_eqn_ids[2]) = -gamma_sigma_max*x23 + tau;
   residual(global_eqn_ids[3]) = Qin - Qout - dvolume_dt;
   residual(global_eqn_ids[4]) = Pin - Pout;
@@ -140,7 +138,6 @@ void ChamberSphere::update_gradient(
   jacobian.coeffRef(global_eqn_ids[1], global_param_ids[ParamId::volume0]) = x24*x39*(x25*(x26*(x6 - 2) + 0.16666666666666666*x27*x9*(-x28*x3 - x6)) + x32*(-x26*x29 + 0.33333333333333331*x28*x30*x9));
   jacobian.coeffRef(global_eqn_ids[1], global_param_ids[ParamId::guccione_C]) = -x31*x35*x37;
   jacobian.coeffRef(global_eqn_ids[2], global_param_ids[ParamId::gamma_sigma_max]) = -x23;
-  jacobian.coeffRef(global_eqn_ids[1], global_param_ids[ParamId::prestress]) = 1;
   jacobian.coeffRef(global_eqn_ids[2], global_param_ids[ParamId::t_shift]) = x41*x42*(-m1*x15*x21 + m1*x16*x21 - x16*x40)/x13;
   jacobian.coeffRef(global_eqn_ids[2], global_param_ids[ParamId::tau_1]) = m1*x12*x43;
   jacobian.coeffRef(global_eqn_ids[2], global_param_ids[ParamId::tau_2]) = -x18*x40*x44;

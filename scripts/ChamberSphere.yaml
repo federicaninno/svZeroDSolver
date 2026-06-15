@@ -28,7 +28,6 @@ constants:
   - volume0
   - guccione_C # gamma * C, scaling in front of the Guccione exponential
   - gamma_sigma_max # gamma * sigma_max, active-stress amplitude
-  - prestress
   - t_shift # two-hill twitch onset
   - tau_1 # two-hill rise time
   - tau_2 # two-hill fall time
@@ -91,7 +90,7 @@ helper_functions: |
 
 residuals:
   - stretch(volume) * stress - Pout * CG(volume)
-  - -stress + tau + passive(volume) + prestress
+  - -stress + tau + passive(volume)
   - tau - gamma_sigma_max * activation
   - Qin - Qout - dvolume_dt
   - Pin - Pout
