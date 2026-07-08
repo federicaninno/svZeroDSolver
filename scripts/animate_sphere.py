@@ -1,6 +1,7 @@
 """
 Animate a sphere cross-section inflating and deflating over 5 seconds.
-Peak inflation at t=2.5s (halfway). Only r0 changes; t0 stays constant.
+Peak inflation at t=2.5s (halfway). r0 changes; t0 shrinks to conserve
+wall volume (incompressible material): t0 = T0_REF * (R0_MIN/r0)**2.
 """
 
 import numpy as np
@@ -10,9 +11,9 @@ from matplotlib.animation import FuncAnimation, FFMpegWriter
 import argparse
 
 # --- Parameters ---
-R0_MIN = 2.8   # inner radius at rest (cm)
+R0_MIN = 2.8   # inner radius at rest / reference state (cm)
 R0_MAX = 4.0   # inner radius at peak inflation (cm)
-T0 = 0.6       # wall thickness (constant, cm)
+T0_REF = 0.6   # wall thickness at reference state (cm)
 DURATION = 5.0 # seconds
 FPS = 30
 
@@ -26,11 +27,16 @@ def r0_at(t):
     return R0_MIN + (R0_MAX - R0_MIN) * 0.5 * (1 - np.cos(2 * np.pi * t / DURATION))
 
 
+def t0_at(r0):
+    """Incompressible wall: 4π r² h = const  →  h = T0_REF * (R0_MIN/r0)²."""
+    return T0_REF * (R0_MIN / r0) ** 2
+
+
 def draw_sphere_cross_section(ax, r0, t0):
     ax.clear()
 
     r_outer = r0 + t0
-    lim = R0_MAX + T0 + PADDING
+    lim = R0_MAX + T0_REF + PADDING
 
     # --- Two unfilled circles (wall outline only) ---
     outer_circle = plt.Circle((0, 0), r_outer, fill=False, edgecolor="black", linewidth=2, zorder=2)
@@ -88,8 +94,9 @@ def main():
     def update(frame):
         t = frame / FPS
         r0 = r0_at(t)
-        draw_sphere_cross_section(ax, r0, T0)
-        time_text.set_text(f"t = {t:.2f} s   |   r₀ = {r0:.2f} cm   |   t₀ = {T0:.2f} cm")
+        t0 = t0_at(r0)
+        draw_sphere_cross_section(ax, r0, t0)
+        time_text.set_text(f"t = {t:.2f} s   |   r₀ = {r0:.2f} cm   |   t₀ = {t0:.3f} cm")
         return []
 
     ani = FuncAnimation(fig, update, frames=N_FRAMES, interval=1000 / FPS, blit=False)
