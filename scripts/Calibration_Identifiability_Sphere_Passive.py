@@ -101,14 +101,19 @@ import matplotlib.pyplot as plt
 # USER SETTINGS
 # ============================================================
 
-MATERIAL_MODEL = "NH"  # "NH" or "HO"
+MATERIAL_MODEL = "HO"  # "NH" or "HO"
+
+# JSON_PATH = (
+#     "/Users/Postdoc/Reduced_order_modeling/svZeroDSolver_Sphere_opt/svZeroDSolver/"
+#     "build/chamber_sphere_NH_calibr_E_100kPa_4calibration_notaunovelonostressnoradius.json"
+# )
 
 JSON_PATH = (
     "/Users/Postdoc/Reduced_order_modeling/svZeroDSolver_Sphere_opt/svZeroDSolver/"
-    "build/chamber_sphere_NH_calibr_E_100kPa_4calibration_notaunovelonostressnoradius.json"
+    "build/chamber_sphere_HO_passive_calibr_realfibers_correctParams_Nikou.json"
 )
 
-OUT_DIR = "/Users/Postdoc/Reduced_order_modeling/svZeroDSolver_Sphere_opt/svZeroDSolver/scripts/identifiability_passive_NH_gammaxW1_gammaxeta_n"
+OUT_DIR = "/Users/Postdoc/Reduced_order_modeling/svZeroDSolver_Sphere_opt/svZeroDSolver/scripts/identifiability_passive_HO_gammaxa_n_bfixed_fibers0_eta0"
 
 # Raw parameter vocabulary per material model, and their fixed/reference
 # values. Every raw parameter must appear here regardless of whether it ends
@@ -129,7 +134,7 @@ BASE_PARAMS = dict(NH_BASE_PARAMS if MATERIAL_MODEL == "NH" else HO_BASE_PARAMS)
 # product "gamma*<partner>" (see docstring above for which partners are
 # supported, and what freeing TWO such products at once requires). Anything
 # not named here (in any entry) stays fixed at its BASE_PARAMS value.
-FREE_PARAMS = ["gamma*W1", "gamma*eta"]
+FREE_PARAMS = ["gamma*a", "n"]
 
 # Reference/initial value for a free parameter, when it must differ from its
 # BASE_PARAMS entry (log-space optimization needs a strictly positive start,
@@ -446,8 +451,21 @@ def interval(grid, prof, thr):
     return (float(ok.min()), float(ok.max())) if ok.size else (np.nan, np.nan)
 
 
-def is_identifiable(lo, hi, grid):
-    return np.isfinite(lo) and hi < grid[-1] and lo > grid[0]
+def classify_profile(grid, prof, thr, rmse_hat):
+    """Confidence interval plus a verdict that tells apart two very
+    different reasons the interval can come back empty: the parameter is
+    genuinely unconstrained (RMSE stays above thr everywhere scanned), vs.
+    it's constrained so tightly that its peak is narrower than a single
+    grid step -- rmse_hat itself is comfortably below thr, but no discrete
+    grid point happens to land close enough to the optimum to also be. The
+    latter is NOT "not constrained"; if anything it's the opposite."""
+    lo, hi = interval(grid, prof, thr)
+    if np.isfinite(lo):
+        tag = "IDENTIFIABLE" if (hi < grid[-1] and lo > grid[0]) else "NOT constrained within grid"
+        return lo, hi, tag
+    if rmse_hat < thr:
+        return lo, hi, "IDENTIFIABLE (narrower than grid resolution)"
+    return lo, hi, "NOT constrained within grid"
 
 
 # ============================================================
@@ -467,6 +485,8 @@ def profile_one_entry(k, theta_hat, model, case):
     prof_rmse = np.empty(GRID_N)
     samples = [None] * GRID_N
 
+    theta_hat_nuisance = theta_hat[nuisance_idx].copy()
+
     def solve_at(i, theta_nuisance_guess):
         theta_val = float(np.log(axis_grid[i]))
 
@@ -480,23 +500,32 @@ def profile_one_entry(k, theta_hat, model, case):
         theta_full = np.empty(n_entries)
         theta_full[k] = theta_val
         if nuisance_idx:
-            sol = least_squares(resid_nuisance, theta_nuisance_guess, method="lm", max_nfev=2000)
-            theta_full[nuisance_idx] = sol.x
-            r, next_guess = sol.fun, sol.x
+            # Try both the running warm-start and a fresh restart from the
+            # joint optimum's own nuisance values, keep whichever is better.
+            # Warm-starting alone can get stuck at a bad local sub-solve
+            # partway through the sweep (not just at the first point of a
+            # direction) -- and once stuck, every later point in the chain
+            # inherits that bad guess. Giving every single point a chance to
+            # reset to a point already known to fit well prevents that.
+            guesses = [theta_nuisance_guess]
+            if not np.allclose(theta_nuisance_guess, theta_hat_nuisance):
+                guesses.append(theta_hat_nuisance)
+            best_sol = None
+            for guess in guesses:
+                sol = least_squares(resid_nuisance, guess, method="lm", max_nfev=2000)
+                if best_sol is None or np.linalg.norm(sol.fun) < np.linalg.norm(best_sol.fun):
+                    best_sol = sol
+            theta_full[nuisance_idx] = best_sol.x
+            r, next_guess = best_sol.fun, best_sol.x
         else:
             r, next_guess = resid_nuisance(np.array([])), theta_nuisance_guess
         return theta_full, float(np.sqrt(np.mean(r ** 2))), next_guess
 
     # Sweep outward from the grid point closest to the true joint optimum, in
     # both directions, each restarted from theta_hat's own nuisance values.
-    # A single sweep across the whole range (warm-starting only from the
-    # previous point) lets one bad, ill-conditioned sub-solve near one edge
-    # poison every later point in the chain -- including ones that pass
-    # straight through the true optimum. Restarting each direction from a
-    # point already known to fit well keeps every step small.
     center = int(np.argmin(np.abs(np.log(axis_grid / axis_best))))
     for start, stop, step in [(center, GRID_N, 1), (center - 1, -1, -1)]:
-        theta_nuisance = theta_hat[nuisance_idx].copy()
+        theta_nuisance = theta_hat_nuisance.copy()
         for i in range(start, stop, step):
             theta_full, prof_rmse[i], theta_nuisance = solve_at(i, theta_nuisance)
             samples[i] = (theta_full.copy(), prof_rmse[i])
@@ -580,9 +609,8 @@ def run_analysis():
         grid, prof, samples = profile_one_entry(k, theta_hat, model, case)
         all_samples.extend(samples)
         best = axis_value(theta_hat[k])
-        lo, hi = interval(grid, prof, thr)
+        lo, hi, tag_k = classify_profile(grid, prof, thr, rmse_hat)
         pct = 100 * (hi - lo) / 2 / best if np.isfinite(lo) else np.nan
-        tag_k = "IDENTIFIABLE" if is_identifiable(lo, hi, grid) else "NOT constrained within grid"
         profiles[label] = dict(grid=grid, prof=prof, best=best, lo=lo, hi=hi, tag=tag_k)
         summary_rows.append(dict(quantity=label, best=best, lo=lo, hi=hi, pct=pct, tag=tag_k))
         print(f"  {label:>10s} in [{lo:.4g}, {hi:.4g}]  (+/-{pct:.0f}%) -> {tag_k}")
