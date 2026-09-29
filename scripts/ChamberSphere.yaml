@@ -42,6 +42,9 @@ constants:
 # written symbolically so that scripts/jacobian.py can differentiate the
 # active-stress equation with respect to the activation/timing parameters for the
 # calibrator's update_gradient. The two must stay consistent.
+# The solver sets t = t_shift + mod(time - t_shift, T) (twitch_time in
+# ChamberSphere.cpp), so t - t_shift lies in [0, T) and the twitch is periodic.
+# Keep that definition of t when regenerating the C++.
 time_symbol: t
 
 helper_functions: |

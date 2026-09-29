@@ -3,7 +3,23 @@
 
 #include "ChamberSphere.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include "Model.h"
+
+// Activation time t, chosen so that the twitch time t - t_shift is wrapped
+// into [0, period): the twitch is periodic, and the part of the upstroke that
+// starts before the cycle origin (t_shift < 0) appears at the end of the cycle
+// instead of being cut off. d(t - t_shift)/d(t_shift) = -1 as before, so the
+// generated expressions (and the t_shift Jacobian column) are unchanged. The
+// floor keeps t - t_shift > 0 (the t_shift Jacobian divides by it).
+static double twitch_time(double time, double period, double t_shift) {
+  if (period <= 0.0) return time;
+  double s = std::fmod(time - t_shift, period);
+  if (s < 0.0) s += period;
+  return t_shift + std::max(s, 1e-12 * period);
+}
 
 void ChamberSphere::setup_dofs(DOFHandler& dofhandler) {
   Block::setup_dofs_(dofhandler, 5,
@@ -33,7 +49,7 @@ void ChamberSphere::update_time(SparseSystem& system,
   const double tau_1 = parameters[global_param_ids[ParamId::tau_1]];
   const double gamma_sigma_max = parameters[global_param_ids[ParamId::gamma_sigma_max]];
   const double tau_2 = parameters[global_param_ids[ParamId::tau_2]];
-  const double t = model->cardiac_cycle_period > 0.0 ? fmod(model->time, model->cardiac_cycle_period) : model->time;
+  const double t = twitch_time(model->time, model->cardiac_cycle_period, t_shift);
   system.C.coeffRef(global_eqn_ids[2]) = -gamma_sigma_max*pow((t - t_shift)/tau_1, m1)/((pow((t - t_shift)/tau_1, m1) + 1)*(pow((t - t_shift)/tau_2, m2) + 1));
 }
 
@@ -81,7 +97,7 @@ void ChamberSphere::update_gradient(
   const double tau = y[global_var_ids[5]];
   const double volume = y[global_var_ids[6]];
   const double dvolume_dt = dy[global_var_ids[6]];
-  const double t = model->cardiac_cycle_period > 0.0 ? fmod(model->time, model->cardiac_cycle_period) : model->time;
+  const double t = twitch_time(model->time, model->cardiac_cycle_period, t_shift);
 
   const double x0 = 1.0/volume0;
   const double x1 = volume + volume0;
