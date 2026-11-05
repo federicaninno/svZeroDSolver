@@ -23,7 +23,7 @@ FREE_PARAMS is a list of strings. Each entry is EXACTLY ONE optimization
 variable (one profile-likelihood curve), and is either:
   - a single raw parameter name, e.g. "n", "b"; or
   - a tied product "gamma*<partner>", where <partner> is "W1" or "eta" (NH),
-    or "a" or "eta" (HO) -- see ALLOWED below.
+    or "a", "a4f", or "eta" (HO) -- see ALLOWED below.
 
 Every raw parameter that does not appear in ANY entry stays FIXED at its
 BASE_PARAMS value. Nothing is decomposed automatically: FREE_PARAMS =
@@ -31,16 +31,18 @@ BASE_PARAMS value. Nothing is decomposed automatically: FREE_PARAMS =
 never separate "gamma" and "a" curves (list them separately instead, e.g.
 FREE_PARAMS = ["gamma", "a", "n"], a different, 3-DOF analysis).
 
-Only "gamma*W1" / "gamma*eta" (NH) and "gamma*a" / "gamma*eta" (HO) are
-accepted as tied products -- anything else (e.g. "b*n", "a*b") raises an
-error at startup. This is deliberate: gamma is a pure linear prefactor of
-the whole stress, and W1/a/eta are each the pure linear coefficient of the
-one additive term they multiply, so "gamma*<that coefficient>" is the one
-kind of product for which "only the product matters" is a clean statement
-about the model. Any other pairing sits inside a nonlinear term (b, b4f,
-b4s are inside exp(); n is inside an exponent of V/V0 itself) and would be
-numerically computable but wouldn't mean what "identifiability of the
-product" is supposed to mean.
+Only "gamma*W1" / "gamma*eta" (NH) and "gamma*a" / "gamma*a4f" / "gamma*eta"
+(HO) are accepted as tied products -- anything else (e.g. "b*n", "a*b")
+raises an error at startup. This is deliberate: gamma is a pure linear
+prefactor of the whole stress, and W1/a/a4f/eta are each the pure linear
+coefficient of the one additive term they multiply (a4f multiplies its own
+fiber term a4f*macaulay*exp(b4f*macaulay^2) inside dWe_dJ4, independent of
+the separate sheet term a4s*macaulay*exp(b4s*macaulay^2) sitting alongside
+it), so "gamma*<that coefficient>" is the one kind of product for which
+"only the product matters" is a clean statement about the model. Any other
+pairing sits inside a nonlinear term (b, b4f, b4s are inside exp(); n is
+inside an exponent of V/V0 itself) and would be numerically computable but
+wouldn't mean what "identifiability of the product" is supposed to mean.
 
 ONE tied product active (e.g. just "gamma*a"): gamma and its partner move
 TOGETHER, each scaled by the same multiplicative step from their own
@@ -48,20 +50,23 @@ reference values (BASE_PARAMS, or an INIT_OVERRIDES entry). gamma is still
 a real, separately reconstructed number, so it correctly keeps scaling any
 OTHER fixed term it also multiplies (fixed nonzero fiber/viscous terms).
 
-TWO tied products active at once (e.g. "gamma*W1" and "gamma*eta" for NH,
-matching optimization_HO_products_...py's product-mode calibration): gamma
-can no longer be reconstructed as one standalone number shared by both, so
+TWO OR MORE tied products active at once (e.g. "gamma*W1" and "gamma*eta"
+for NH, or "gamma*a" and "gamma*a4f" for HO, matching
+optimization_HO_products_...py's product-mode calibration): gamma can no
+longer be reconstructed as one standalone number shared by all of them, so
 it is eliminated from the model entirely -- each active product directly
-supplies the coefficient of its own additive term (isotropic / viscous).
-This requires every OTHER term gamma would also touch to be fixed at
-exactly zero (HO fiber terms a4f/a4s; NH's W2) -- validated at startup,
-since there would otherwise be no way to know what gamma should multiply
-them by.
+supplies the coefficient of its own additive term (isotropic / fiber /
+viscous). This requires every OTHER term gamma would also touch, that is
+NOT itself one of the active products, to be fixed at exactly zero (e.g.
+HO's sheet term a4s always; eta too, unless "gamma*eta" is also active;
+NH's W2) -- validated at startup, since there would otherwise be no way to
+know what gamma should multiply them by.
 
 Examples:
     FREE_PARAMS = ["gamma", "n"]              # original geometry-only analysis
     FREE_PARAMS = ["gamma*a", "n"]             # HO: one product; b, fibers, eta fixed
     FREE_PARAMS = ["gamma*a", "gamma*eta", "n"]  # HO: two products at once (fibers must be 0)
+    FREE_PARAMS = ["gamma*a", "gamma*a4f", "n"]  # HO: isotropic + fiber tied (sheet, eta must be 0)
     FREE_PARAMS = ["gamma", "a", "b", "n"]     # HO: gamma, a, b, n each profiled separately
     FREE_PARAMS = ["gamma*W1", "gamma*eta", "n"]  # NH: matches optimization_HO_products_...py
 
@@ -88,6 +93,7 @@ optimization -- and regenerates the clean "profiles only" figure.)
 
 import argparse
 import json
+import os
 
 import matplotlib
 import numpy as np
@@ -101,26 +107,28 @@ import matplotlib.pyplot as plt
 # USER SETTINGS
 # ============================================================
 
-MATERIAL_MODEL = "HO"  # "NH" or "HO"
+MATERIAL_MODEL = "NH"  # "NH" or "HO"
 
-# JSON_PATH = (
-#     "/Users/Postdoc/Reduced_order_modeling/svZeroDSolver_Sphere_opt/svZeroDSolver/"
-#     "build/chamber_sphere_NH_calibr_E_100kPa_4calibration_notaunovelonostressnoradius.json"
-# )
+# Paths are relative to this script's folder, so the script runs from any
+# working directory on any machine. OUT_DIR is created if it doesn't exist.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-JSON_PATH = (
-    "/Users/Postdoc/Reduced_order_modeling/svZeroDSolver_Sphere_opt/svZeroDSolver/"
-    "build/chamber_sphere_HO_passive_calibr_realfibers_correctParams_Nikou.json"
-)
+JSON_PATH = os.path.join(SCRIPT_DIR, "data", "chamber_sphere_HO_passive_calibr_realfibers_correctParams_Nikou.json")
+OUT_DIR = os.path.join(SCRIPT_DIR, "Nikou_calibration_output")
 
-OUT_DIR = "/Users/Postdoc/Reduced_order_modeling/svZeroDSolver_Sphere_opt/svZeroDSolver/scripts/identifiability_passive_HO_gammaxa_n_bfixed_fibers0_eta0"
+# JSON_PATH = os.path.join(SCRIPT_DIR, "..", "build", "Mg1s1_calibration.json")
+# OUT_DIR = os.path.join(SCRIPT_DIR, "Mg1s1_calibration_output_higher_volume")
 
 # Raw parameter vocabulary per material model, and their fixed/reference
 # values. Every raw parameter must appear here regardless of whether it ends
 # up free or fixed -- FREE_PARAMS below decides which ones are optimized.
+# Sheet (a4s) and viscosity (eta) fixed at 0: dropped from the model (see
+# module docstring's PRODUCT_MODE section -- with both "gamma*a" and
+# "gamma*a4f" tied, gamma is no longer a standalone number, so every OTHER
+# term it would also touch must be exactly zero).
 NH_BASE_PARAMS = {"gamma": 0.5, "n": 1.0, "W1": 1.69e5, "W2": 0.0, "eta": 0.0}
 HO_BASE_PARAMS = {
-    "gamma": 0.5, "n": 1.0,
+    "gamma": 0.5, "n": 1.2,
     "a": 14720.0, "b": 33.39,
     "a4f": 0.0, "b4f": 0.0,
     "a4s": 0.0, "b4s": 0.0,
@@ -134,14 +142,14 @@ BASE_PARAMS = dict(NH_BASE_PARAMS if MATERIAL_MODEL == "NH" else HO_BASE_PARAMS)
 # product "gamma*<partner>" (see docstring above for which partners are
 # supported, and what freeing TWO such products at once requires). Anything
 # not named here (in any entry) stays fixed at its BASE_PARAMS value.
-FREE_PARAMS = ["gamma*a", "n"]
+FREE_PARAMS = ["gamma*W1"]  # HO: two tied products at once (sheet, eta must be 0)
 
 # Reference/initial value for a free parameter, when it must differ from its
 # BASE_PARAMS entry (log-space optimization needs a strictly positive start,
 # so a parameter whose passive default is 0, e.g. eta, needs an override here
 # if you free it). Parameters not listed here just use BASE_PARAMS.
 INIT_OVERRIDES = {
-    "eta": 500.0,  # gives gamma*eta an initial guess of ~250, order-of-magnitude
+    "eta": 0.0,  # gives gamma*eta an initial guess of ~250, order-of-magnitude
                    # sensitive here (product mode's cost surface is quite sloppy) --
                    # see optimization_HO_products_...py's own NH_OPT_INIT for reference
 }
@@ -176,10 +184,34 @@ RAW_PARAM_REGISTRY = {
 # to (see module docstring for why).
 GAMMA_TERM_PARTNERS = {
     "NH": {"W1": "isotropic", "eta": "viscous"},
-    "HO": {"a": "isotropic", "eta": "viscous"},
+    "HO": {"a": "isotropic", "a4f": "fiber", "eta": "viscous"},
+}
+
+# EVERY additive-stress-term raw parameter gamma multiplies, per model --
+# a superset of GAMMA_TERM_PARTNERS.values() above. Used only by
+# validate_config's PRODUCT_MODE check: any term here that is NOT one of
+# the active tied products (i.e. not in GAMMA_TERM_MAP) must be fixed at
+# exactly 0, since gamma is not reconstructed as a standalone number once
+# PRODUCT_MODE is active and so cannot scale it. HO's sheet term (a4s) and
+# NH's W2 are here but absent from GAMMA_TERM_PARTNERS because they can
+# never be tied (see module docstring) -- they can only ever be zeroed.
+GAMMA_ALL_TERMS = {
+    "NH": {"isotropic": "W1", "isotropic_J2": "W2", "viscous": "eta"},
+    "HO": {"isotropic": "a", "fiber": "a4f", "sheet": "a4s", "viscous": "eta"},
 }
 
 MMHG_TO_BARYE = 1333.22
+
+# Units of each raw parameter (CGS, pressure in dyn/cm^2 = barye; "-" =
+# dimensionless). eta multiplies Cdot, so it carries a time unit (time in s).
+PARAM_UNITS = {
+    "gamma": "-", "n": "-",
+    "W1": "dyn/cm²", "W2": "dyn/cm²",
+    "a": "dyn/cm²", "b": "-",
+    "a4f": "dyn/cm²", "b4f": "-",
+    "a4s": "dyn/cm²", "b4s": "-",
+    "eta": "dyn·s/cm²",
+}
 
 # FREE_PARAMS, parsed once: one raw-parameter-name list ("group") per entry.
 FREE_GROUPS = [entry.split("*") for entry in FREE_PARAMS]
@@ -263,19 +295,19 @@ def validate_config():
         )
 
     if PRODUCT_MODE:
-        if MATERIAL_MODEL == "HO" and (BASE_PARAMS["a4f"] != 0.0 or BASE_PARAMS["a4s"] != 0.0):
-            raise ValueError(
-                "Two or more tied gamma products (e.g. gamma*a and gamma*eta) are free at once, so "
-                "gamma is never reconstructed as a standalone number -- but the fiber terms (a4f, a4s) "
-                "are still fixed at a nonzero value, and gamma would need to multiply them too. Set "
-                "a4f = a4s = 0.0 in HO_BASE_PARAMS, or free only one gamma product at a time."
-            )
-        if MATERIAL_MODEL == "NH" and BASE_PARAMS["W2"] != 0.0:
-            raise ValueError(
-                "gamma*W1 and gamma*eta are both free at once, so gamma is never reconstructed as a "
-                "standalone number -- but W2 is still fixed at a nonzero value, and gamma would need "
-                "to multiply it too. Set W2 = 0.0 in NH_BASE_PARAMS."
-            )
+        for term_key, raw_param in GAMMA_ALL_TERMS[MATERIAL_MODEL].items():
+            if term_key in GAMMA_TERM_MAP:
+                continue  # this term IS one of the active tied products
+            if BASE_PARAMS[raw_param] != 0.0:
+                active = ", ".join(f"gamma*{p}" for p in seen if p in partners)
+                raise ValueError(
+                    f"Two or more tied gamma products ({active}) are free at once, so gamma is never "
+                    f"reconstructed as a standalone number -- but '{raw_param}' (the {term_key} term's "
+                    f"coefficient) is still fixed at a nonzero value ({BASE_PARAMS[raw_param]}), and gamma "
+                    f"would need to multiply it too. Set {raw_param} = 0.0 in "
+                    f"{MATERIAL_MODEL}_BASE_PARAMS, or free it as its own tied product too if it has one "
+                    f"(see GAMMA_TERM_PARTNERS)."
+                )
 
 
 def run_tag():
@@ -334,9 +366,9 @@ def model_pressure(params, model, case):
 def model_pressure_product_mode(theta, model, case, singleton_params):
     """P_model(t) when 2+ tied gamma products are free simultaneously: gamma
     is never reconstructed. Each active product directly supplies the
-    coefficient of its own additive term (isotropic / viscous); any other
-    term gamma would also touch must be exactly 0 (validate_config checks
-    this)."""
+    coefficient of its own additive term (isotropic / fiber / viscous); any
+    other term gamma would also touch must be exactly 0 (validate_config
+    checks this)."""
     n = singleton_params["n"]
     lam = case["Vratio"] ** (1.0 / (3.0 * n))
     C = lam ** 2
@@ -358,8 +390,12 @@ def model_pressure_product_mode(theta, model, case, singleton_params):
     elif model == "HO":
         J1 = (1.0 / C ** 2) + 2.0 * C
         g_isotropic = term_value("isotropic", "a")
+        g_fiber = term_value("fiber", "a4f")
+        macaulay = np.maximum(C - 1.0, 0.0)
+        dWe_dJ4_fiber = g_fiber * macaulay * safe_exp(singleton_params["b4f"] * macaulay ** 2)
         stress_over_lam = (
             4.0 * (1.0 - C ** -3) * 0.5 * g_isotropic * safe_exp(singleton_params["b"] * (J1 - 3.0))
+            + 2.0 * dWe_dJ4_fiber
             + g_viscous * Cdot * (1.0 + 2.0 * C ** -6)
         )
     else:
@@ -427,6 +463,19 @@ def params_from_theta(theta):
             for p in group:
                 params[p] = effective_base(p) * mult
     return params
+
+
+def split_affects_model(theta):
+    """True when the standalone gamma reconstructed from a single tied product
+    also scales some OTHER nonzero additive term (fixed or free), so the
+    split actually changes P_model. When every other term gamma multiplies is
+    0, only the product enters the forward model and the split is cosmetic."""
+    if PRODUCT_MODE or N_GAMMA_PRODUCTS == 0:
+        return False
+    params = params_from_theta(theta)
+    tied = {p for g in FREE_GROUPS if len(g) == 2 for p in g if p != "gamma"}
+    return any(params[raw] != 0.0
+               for raw in GAMMA_ALL_TERMS[MATERIAL_MODEL].values() if raw not in tied)
 
 
 def model_pressure_from_theta(theta, model, case):
@@ -564,11 +613,12 @@ def run_analysis():
     if PRODUCT_MODE:
         print(f"PRODUCT_MODE: {N_GAMMA_PRODUCTS} tied gamma products free at once -- "
               f"gamma is not reconstructed as a standalone number.")
+    os.makedirs(OUT_DIR, exist_ok=True)
     case = load_case(JSON_PATH)
     p_range_mmHg = float((case["Pout"].max() - case["Pout"].min()) / MMHG_TO_BARYE)
     flat_free = [p for g in FREE_GROUPS for p in g]
     fixed_params = {p: v for p, v in BASE_PARAMS.items() if p not in flat_free}
-    print(f"Loaded {JSON_PATH.split('/')[-1]}: N={len(case['time'])}, P range={p_range_mmHg:.2f} mmHg")
+    print(f"Loaded {os.path.basename(JSON_PATH)}: N={len(case['time'])}, P range={p_range_mmHg:.2f} mmHg")
     print(f"Free parameters (one DOF each): {FREE_PARAMS}")
     print(f"Fixed parameters: {fixed_params}")
 
@@ -587,6 +637,8 @@ def run_analysis():
             print(f"  {label:>10s} = {value:.6g}")
         elif PRODUCT_MODE:
             print(f"  {label:>10s} = {value:.6g}  (gamma not separately reconstructed)")
+        elif not split_affects_model(theta_hat):
+            print(f"  {label:>10s} = {value:.6g}  (split has no effect on the model; not shown)")
         else:
             base_prod = float(np.prod([effective_base(p) for p in group]))
             mult = (value / base_prod) ** (1.0 / len(group))
@@ -596,6 +648,7 @@ def run_analysis():
     if not RUN_IDENTIFIABILITY:
         print("\nRUN_IDENTIFIABILITY = False -- skipping profile likelihood, FIM, and CSVs.")
         make_fit_only_figure(model, tag, case, theta_hat)
+        make_final_pv_figure(model, tag, case, theta_hat, rmse_hat)
         return
 
     thr = rmse_hat + DELTA_MMHG
@@ -636,11 +689,71 @@ def run_analysis():
     # ---------------- figures ----------------
     make_diagnostic_figure(model, tag, case, profiles, theta_hat, all_samples, thr, rmse_hat)
     make_clean_profiles_figure(model, tag, profiles, rmse_hat, p_range_mmHg)
+    make_final_pv_figure(model, tag, case, theta_hat, rmse_hat)
 
 
 # ============================================================
 # PLOTTING
 # ============================================================
+
+def make_final_pv_figure(model, tag, case, theta_hat, rmse_hat):
+    """Final PV loop: input (black, same style as average_lv_pressure_cycles.py's
+    plot_pv_loop) vs. fitted sphere (orange), plus a table of calibrated and
+    fixed parameter values."""
+    order_idx = np.argsort(case["time"])
+    V = case["volume"][order_idx]
+    P_input = case["Pout"][order_idx] / MMHG_TO_BARYE
+    P_fit = model_pressure_from_theta(theta_hat, model, case)[order_idx] / MMHG_TO_BARYE
+
+    def units(group):
+        # gamma is dimensionless, so a tied product carries its partner's units
+        u = [PARAM_UNITS[p] for p in group if PARAM_UNITS[p] != "-"]
+        return u[0] if u else "-"
+
+    # table rows: calibrated FREE_PARAMS entries first, then fixed raw params
+    rows = []
+    for k, (label, group) in enumerate(zip(FREE_PARAMS, FREE_GROUPS)):
+        value = axis_value(theta_hat[k])
+        rows.append([label, f"{value:.6g}", units(group), "calibrated"])
+        if len(group) == 2 and split_affects_model(theta_hat):
+            base_prod = float(np.prod([effective_base(p) for p in group]))
+            mult = (value / base_prod) ** (1.0 / len(group))
+            for p in group:
+                rows.append([f"  {p} (split)", f"{effective_base(p) * mult:.6g}", PARAM_UNITS[p], "calibrated"])
+    flat_free = [p for g in FREE_GROUPS for p in g]
+    for p, v in BASE_PARAMS.items():
+        if p not in flat_free:
+            rows.append([p, f"{v:.6g}", PARAM_UNITS[p], "fixed"])
+    rows.append(["RMSE", f"{rmse_hat:.4g}", "mmHg", "fit"])
+
+    fig, (ax, ax_tab) = plt.subplots(1, 2, figsize=(13, 6), gridspec_kw={"width_ratios": [1.4, 1]})
+    ax.plot(V, P_input, color="black", linewidth=1.8, marker="o", markersize=4, label="input")
+    ax.plot(V, P_fit, color="tab:orange", linewidth=2.2, label="fitted sphere")
+    ax.set_xlabel("Volume (mL)", fontsize=20)
+    ax.set_ylabel("Pressure (mmHg)", fontsize=20)
+    ax.tick_params(axis="x", labelsize=16)
+    ax.tick_params(axis="y", labelsize=16)
+    ax.legend(fontsize=14)
+
+    ax_tab.axis("off")
+    table = ax_tab.table(cellText=rows, colLabels=["Parameter", "Value", "Units", "Status"],
+                         loc="center", cellLoc="left", colLoc="left")
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.0, 1.6)
+    table.auto_set_column_width(list(range(4)))
+    for (r, _c), cell in table.get_celld().items():
+        if r == 0:
+            cell.set_text_props(weight="bold")
+        elif rows[r - 1][3] == "calibrated":
+            cell.set_facecolor("#fde7cf")  # light orange: calibrated rows
+
+    fig.tight_layout()
+    out_png = f"{OUT_DIR}/identifiability_{model}_{tag}_final_PV_fit.png"
+    fig.savefig(out_png, dpi=200)
+    plt.close(fig)
+    print(f"Saved {out_png}")
+
 
 def make_fit_only_figure(model, tag, case, theta_hat):
     """RUN_IDENTIFIABILITY = False: just the best fit against the data, no

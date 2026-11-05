@@ -78,7 +78,7 @@ DEFAULT_HO_BASE_PARAMS_REAL_FIBERS = {
 }
 
 NH_JSON = str(REPO_ROOT / "build" / "chamber_sphere_NH_calibr_E_100kPa_4calibration_notaunovelonostressnoradius.json")
-HO_JSON = str(REPO_ROOT / "build" / "chamber_sphere_HO_passive_calibr_realfibers_correctParams_Nikou.json")
+HO_JSON = str(SCRIPT.parent / "data" / "chamber_sphere_HO_passive_calibr_realfibers_correctParams_Nikou.json")
 
 
 def make_script(tmp_path, *, material_model, json_path, free_params,
@@ -210,7 +210,7 @@ def test_rejects_nonzero_w2_in_product_mode(tmp_path):
     )
     result = run_script(script)
     assert result.returncode != 0
-    assert "W2 is still fixed at a nonzero value" in result.stderr
+    assert "Set W2 = 0.0 in NH_BASE_PARAMS" in result.stderr
 
 
 def test_rejects_nonzero_fibers_in_ho_product_mode(tmp_path):
@@ -222,7 +222,7 @@ def test_rejects_nonzero_fibers_in_ho_product_mode(tmp_path):
     )
     result = run_script(script)
     assert result.returncode != 0
-    assert "fiber terms (a4f, a4s) are still fixed at a nonzero value" in result.stderr
+    assert "Set a4f = 0.0 in HO_BASE_PARAMS" in result.stderr
 
 
 def test_rejects_disallowed_nongamma_product(tmp_path):
