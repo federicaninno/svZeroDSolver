@@ -77,7 +77,7 @@ DEFAULT_HO_BASE_PARAMS_REAL_FIBERS = {
     "eta": 50.0,
 }
 
-NH_JSON = str(REPO_ROOT / "build" / "chamber_sphere_NH_calibr_E_100kPa_4calibration_notaunovelonostressnoradius.json")
+NH_JSON = str(SCRIPT.parent / "data" / "chamber_sphere_NH_calibr_E_100kPa_4calibration_notaunovelonostressnoradius.json")
 HO_JSON = str(SCRIPT.parent / "data" / "chamber_sphere_HO_passive_calibr_realfibers_correctParams_Nikou.json")
 
 
