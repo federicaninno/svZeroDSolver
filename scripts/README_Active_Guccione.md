@@ -25,10 +25,10 @@ pip install numpy scipy pandas matplotlib
 
 ## Data
 
-The data are not in the repository. Put the case's CSV in `scripts/fw/`, e.g.
-`scripts/fw/average_over_time_APR29002.csv` (one header line; columns: time [s],
-pressure [mmHg], volume [mL]). For another case, change `CASE` in the wrapper;
-for another file layout, change its `DATA` block.
+An example case is included: `scripts/fw/data_example.csv` (one header line;
+columns: time [s], pressure [mmHg], volume [mL]); the wrapper runs it as is.
+For another case, put its CSV in `scripts/fw/` and set `CASE` in the wrapper to
+the file name without `.csv`; for another file layout, change its `DATA` block.
 
 ## Run
 

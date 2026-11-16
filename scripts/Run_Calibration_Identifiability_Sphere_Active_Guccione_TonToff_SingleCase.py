@@ -15,7 +15,7 @@ Single-case version of Run_Calibration_Identifiability_Sphere_Active_Guccione_To
     all in seconds from the first data sample; the engine converts them to the
     solver's (tau_1, tau_2, m1, m2) before every solver call.
   * t_shift (the twitch clock origin) is FIXED, here to the value calibrated
-    for the rest case APR29002 with n = 1 (fw_nfixed batch): -0.0392 s.
+    for the example data (fw/data_example.csv) with n = 1: -0.0392 s.
   * gamma = 1 and n = 1 are fixed (no geometric information). With gamma
     fixed, C and sigma_max are exactly the solver's gamma*C and gamma*sigma_max.
     If you change n, t_shift above no longer matches.
@@ -42,14 +42,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import Calibration_Identifiability_Sphere_Active_Guccione as engine
 
-CASE = "APR29002"
+CASE = "data_example"   # data file fw/<CASE>.csv; also the output folder name
 
 SETTINGS = {
     # ------------------------------------------------------------------
     # DATA: the file and how it is laid out
     # ------------------------------------------------------------------
     "DATA": {
-        "path": os.path.join(HERE, "fw", f"average_over_time_{CASE}.csv"),
+        "path": os.path.join(HERE, "fw", f"{CASE}.csv"),
         "label": CASE,                  # case name for titles / output folder
         "label_remove": "",
         "sep": ",",
@@ -83,7 +83,7 @@ SETTINGS = {
         "gamma": 1.0, "n": 1.0,  # FIXED
         "C": 6069,               # Guccione passive scaling [Barye]
         "sigma_max": 4.0e4,      # max active stress [Barye]
-        "t_shift": -0.0392,      # FIXED twitch clock origin [s] (rest case APR29002, n = 1)
+        "t_shift": -0.0392,      # FIXED twitch clock origin [s] (example data, n = 1)
         "t_on": 0.04,            # half-activation time [s]
         "t_off": 0.30,           # half-relaxation time [s]
         "w1": 0.07,              # 10-90 % contraction duration [s]

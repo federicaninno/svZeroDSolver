@@ -1149,7 +1149,7 @@ def closed(y):
 
 def make_fit_figures(case, theta_hat, rmse_hat, p_range_mmHg, cost_log):
     """PV-loop comparison, pressure vs time and convergence, in the style of
-    the APR29002 figures (optimization_active_contraction_Guccione_multiparameter_4Katrin.py)."""
+    the earlier active-contraction figures (optimization_active_contraction_Guccione_multiparameter_4Katrin.py)."""
     label = DATA["label"]
     sp = solver_params_from_theta(theta_hat)
     P_model, V_model = simulate(case, sp)
